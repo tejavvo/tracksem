@@ -1,26 +1,7 @@
-import { DEFAULT_COURSES } from '$lib/data/courses';
 import type { Course, Component, SubItem } from '$lib/types';
-
-const STORAGE_KEY = 'tracksem_grades_v2';
 
 function generateId(): string {
     return Math.random().toString(36).slice(2, 10);
-}
-
-function loadFromStorage(): Course[] {
-    if (typeof window === 'undefined') return structuredClone(DEFAULT_COURSES);
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return structuredClone(DEFAULT_COURSES);
-        return JSON.parse(raw);
-    } catch (rawErr) {
-        return structuredClone(DEFAULT_COURSES);
-    }
-}
-
-function persist(courses: Course[]): void {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(courses));
 }
 
 /**
@@ -37,7 +18,6 @@ export function computeCompPct(comp: Component): number | null {
         if (filled.length === 0) return null;
 
         if (comp.bestOf && comp.bestOf < filled.length) {
-            // take top bestOf scores
             const top = filled
                 .map((f) => f.pct)
                 .sort((a, b) => b - a)
@@ -53,11 +33,32 @@ export function computeCompPct(comp: Component): number | null {
     return (comp.score / comp.maxScore) * 100;
 }
 
+/** Fire-and-forget API helper */
+async function api(path: string, method: string, body?: unknown): Promise<unknown> {
+    const res = await fetch(path, {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body: body ? JSON.stringify(body) : undefined
+    });
+    return res.json();
+}
+
 class GradesStore {
     courses = $state<Course[]>([]);
+    loaded = $state(false);
 
-    constructor() {
-        this.courses = loadFromStorage();
+    /** Load all courses from the API */
+    async load(): Promise<void> {
+        if (this.loaded) return;
+        const res = await fetch('/api/courses');
+        this.courses = await res.json();
+        this.loaded = true;
+    }
+
+    /** Force reload from DB */
+    async reload(): Promise<void> {
+        const res = await fetch('/api/courses');
+        this.courses = await res.json();
     }
 
     getCourse(id: string): Course | undefined {
@@ -70,7 +71,7 @@ class GradesStore {
         const comp = this.#getComp(courseId, componentId);
         if (!comp) return;
         comp.score = score;
-        persist(this.courses);
+        api('/api/components', 'PATCH', { id: componentId, field: 'score', value: score });
     }
 
     // ─── Sub-item scores ────────────────────────────────────────────────────────
@@ -79,21 +80,21 @@ class GradesStore {
         const sub = this.#getSub(courseId, componentId, subItemId);
         if (!sub) return;
         sub.score = score;
-        persist(this.courses);
+        api('/api/sub-items', 'PATCH', { id: subItemId, field: 'score', value: score });
     }
 
     updateSubMaxScore(courseId: string, componentId: string, subItemId: string, maxScore: number): void {
         const sub = this.#getSub(courseId, componentId, subItemId);
         if (!sub) return;
         sub.maxScore = maxScore;
-        persist(this.courses);
+        api('/api/sub-items', 'PATCH', { id: subItemId, field: 'maxScore', value: maxScore });
     }
 
     updateSubName(courseId: string, componentId: string, subItemId: string, name: string): void {
         const sub = this.#getSub(courseId, componentId, subItemId);
         if (!sub) return;
         sub.name = name;
-        persist(this.courses);
+        api('/api/sub-items', 'PATCH', { id: subItemId, field: 'name', value: name });
     }
 
     addSubItem(courseId: string, componentId: string): void {
@@ -101,31 +102,28 @@ class GradesStore {
         if (!comp) return;
         if (!comp.subItems) comp.subItems = [];
         const n = comp.subItems.length + 1;
-        comp.subItems.push({
-            id: `${componentId}-${generateId()}`,
-            name: `${comp.name} ${n}`,
-            score: null,
-            maxScore: comp.maxScore
-        });
-        persist(this.courses);
+        const id = `${componentId}-${generateId()}`;
+        const name = `${comp.name} ${n}`;
+        comp.subItems.push({ id, name, score: null, maxScore: comp.maxScore });
+        api('/api/sub-items', 'POST', { componentId, id, name, maxScore: comp.maxScore });
     }
 
     removeSubItem(courseId: string, componentId: string, subItemId: string): void {
         const comp = this.#getComp(courseId, componentId);
         if (!comp || !comp.subItems) return;
         comp.subItems = comp.subItems.filter((s) => s.id !== subItemId);
-        // keep bestOf in bounds
         if (comp.bestOf && comp.bestOf > comp.subItems.length) {
             comp.bestOf = comp.subItems.length || undefined;
+            api('/api/components', 'PATCH', { id: componentId, field: 'bestOf', value: comp.bestOf });
         }
-        persist(this.courses);
+        api('/api/sub-items', 'DELETE', { id: subItemId, componentId });
     }
 
     updateBestOf(courseId: string, componentId: string, bestOf: number | undefined): void {
         const comp = this.#getComp(courseId, componentId);
         if (!comp) return;
         comp.bestOf = bestOf;
-        persist(this.courses);
+        api('/api/components', 'PATCH', { id: componentId, field: 'bestOf', value: bestOf });
     }
 
     // ─── Component-level ────────────────────────────────────────────────────────
@@ -134,55 +132,46 @@ class GradesStore {
         const comp = this.#getComp(courseId, componentId);
         if (!comp) return;
         comp.weight = weight;
-        persist(this.courses);
+        api('/api/components', 'PATCH', { id: componentId, field: 'weight', value: weight });
     }
 
     updateMaxScore(courseId: string, componentId: string, maxScore: number): void {
         const comp = this.#getComp(courseId, componentId);
         if (!comp) return;
         comp.maxScore = maxScore;
-        persist(this.courses);
+        api('/api/components', 'PATCH', { id: componentId, field: 'maxScore', value: maxScore });
     }
 
     updateName(courseId: string, componentId: string, name: string): void {
         const comp = this.#getComp(courseId, componentId);
         if (!comp) return;
         comp.name = name;
-        persist(this.courses);
+        api('/api/components', 'PATCH', { id: componentId, field: 'name', value: name });
     }
 
     addComponent(courseId: string): void {
         const course = this.courses.find((c) => c.id === courseId);
         if (!course) return;
-        course.components.push({
-            id: `${courseId}-${generateId()}`,
-            name: 'New Component',
-            weight: 0,
-            maxScore: 100,
-            score: null
-        });
-        persist(this.courses);
+        const id = `${courseId}-${generateId()}`;
+        const name = 'New Component';
+        course.components.push({ id, name, weight: 0, maxScore: 100, score: null });
+        api('/api/components', 'POST', { courseId, id, name });
     }
 
     removeComponent(courseId: string, componentId: string): void {
         const course = this.courses.find((c) => c.id === courseId);
         if (!course) return;
         course.components = course.components.filter((c) => c.id !== componentId);
-        persist(this.courses);
+        api('/api/components', 'DELETE', { id: componentId });
     }
 
-    resetCourse(courseId: string): void {
-        const original = DEFAULT_COURSES.find((c) => c.id === courseId);
-        if (!original) return;
-        const idx = this.courses.findIndex((c) => c.id === courseId);
-        if (idx === -1) return;
-        this.courses[idx] = structuredClone(original);
-        persist(this.courses);
+    async resetCourse(courseId: string): Promise<void> {
+        await api(`/api/courses/${courseId}/reset`, 'POST');
+        await this.reload();
     }
 
     // ─── Derived computations ───────────────────────────────────────────────────
 
-    /** Projected grade for a course (percentage 0–100, or null if no scores at all) */
     projectedGrade(courseId: string): { grade: number | null; filled: number; total: number } {
         const course = this.courses.find((c) => c.id === courseId);
         if (!course) return { grade: null, filled: 0, total: 0 };
@@ -205,7 +194,6 @@ class GradesStore {
         return { grade, filled, total: course.components.length };
     }
 
-    /** Effective percentage (0–100) for a single component including sub-items */
     componentPct(courseId: string, componentId: string): number | null {
         const comp = this.#getComp(courseId, componentId);
         if (!comp) return null;

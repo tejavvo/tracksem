@@ -82,8 +82,8 @@
                     >
                     <button
                         class="action-btn danger mono text-xs"
-                        onclick={() => {
-                            grades.resetCourse(data.courseId);
+                        onclick={async () => {
+                            await grades.resetCourse(data.courseId);
                             confirmReset = false;
                         }}>yes</button
                     >
