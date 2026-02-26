@@ -1,0 +1,102 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.5rem;
+  --background: oklch(0.08 0.02 265);
+  --foreground: oklch(0.92 0.01 265);
+  --card: oklch(0.12 0.025 265);
+  --card-foreground: oklch(0.92 0.01 265);
+  --popover: oklch(0.12 0.025 265);
+  --popover-foreground: oklch(0.92 0.01 265);
+  --primary: oklch(0.92 0.01 265);
+  --primary-foreground: oklch(0.08 0.02 265);
+  --secondary: oklch(0.18 0.03 265);
+  --secondary-foreground: oklch(0.92 0.01 265);
+  --muted: oklch(0.15 0.025 265);
+  --muted-foreground: oklch(0.6 0.02 265);
+  --accent: oklch(0.18 0.03 265);
+  --accent-foreground: oklch(0.92 0.01 265);
+  --destructive: oklch(0.65 0.22 15);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 10%);
+  --ring: oklch(0.6 0.03 265);
+
+  /* Grade color tiers */
+  --grade-s: #4ade80;
+  --grade-a: #86efac;
+  --grade-b: #fbbf24;
+  --grade-c: #fb923c;
+  --grade-f: #f87171;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    box-sizing: border-box;
+  }
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, sans-serif;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(ellipse at 20% 50%, oklch(0.2 0.05 280 / 15%) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, oklch(0.2 0.05 200 / 10%) 0%, transparent 60%);
+  }
+
+  /* TUI scanline effect — very subtle */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      oklch(0 0 0 / 3%) 2px,
+      oklch(0 0 0 / 3%) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: oklch(1 0 0 / 15%); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: oklch(1 0 0 / 25%); }
+}
