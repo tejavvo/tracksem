@@ -8,8 +8,8 @@ A TUI-style grade tracker for sem 2 courses — ISS, CSO, IoT, LA, DSA. Enter sc
 
 - [SvelteKit](https://kit.svelte.dev) + Svelte 5 runes
 - [shadcn-svelte](https://shadcn-svelte.com) + Tailwind CSS v4
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) for persistence
 - [Bun](https://bun.sh)
-- `localStorage` for persistence (no backend)
 
 ## dev
 
@@ -20,6 +20,8 @@ bun run dev
 
 → `http://localhost:5173`
 
+The SQLite database (`data/tracksem.db`) is auto-created and seeded on first run.
+
 ## features
 
 - **Dashboard** — all courses at a glance with letter grade, projected %, and per-component bars
@@ -28,9 +30,11 @@ bun run dev
   - add custom components (bonus marks, participation, etc.)
   - remove any component
   - reset to defaults
+- **Expandable components** — click ⊕ on any flat component to add sub-items (e.g. split "Quiz" into Quiz 1, Quiz 2)
+- **Best-of scoring** — drop lowest N scores automatically (e.g. best 8 of 9 labs)
 - **Live projection** — weighted average recalculates instantly as you type
 - **Weight validation** — warns if component weights don't sum to 100%
-- **Persistent** — data survives page refreshes via localStorage
+- **SQLite persistence** — data lives in `data/tracksem.db`, survives restarts
 
 ## courses
 
@@ -48,9 +52,11 @@ bun run dev
 
 | Letter | Range |
 |--------|-------|
-| S | ≥ 90% |
-| A | ≥ 80% |
-| B | ≥ 70% |
-| C | ≥ 60% |
-| D | ≥ 50% |
-| F | < 50% |
+| A  | ≥ 90% |
+| A- | 85–89% |
+| B  | 80–84% |
+| B- | 75–79% |
+| C  | 70–74% |
+| C- | 65–69% |
+| D  | 60–64% |
+| F  | < 60% |
