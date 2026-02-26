@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { grades } from "$lib/stores/grades.svelte";
+    import { grades, computeCompPct } from "$lib/stores/grades.svelte";
     import type { Course } from "$lib/types";
 
     interface Props {
@@ -64,10 +64,7 @@
         <!-- Component bars -->
         <div class="bars">
             {#each course.components as comp}
-                {@const pct =
-                    comp.score !== null
-                        ? (comp.score / comp.maxScore) * 100
-                        : null}
+                {@const pct = computeCompPct(comp)}
                 {@const barColor = getGradeColor(pct)}
                 <div class="bar-row">
                     <div class="bar-label mono">{comp.name}</div>

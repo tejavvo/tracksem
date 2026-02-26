@@ -1,15 +1,24 @@
+export type SubItem = {
+    id: string;
+    name: string;
+    score: number | null;
+    maxScore: number;
+};
+
 export type Component = {
     id: string;
     name: string;
-    weight: number; // percentage e.g. 15 = 15%
+    weight: number;
     maxScore: number;
-    score: number | null; // null = not yet entered
+    score: number | null;
+    subItems?: SubItem[];
+    bestOf?: number;
 };
 
 export type Course = {
     id: string;
-    name: string; // short e.g. "ISS"
+    name: string;
     fullName: string;
-    color: string; // accent hex color
+    color: string;
     components: Component[];
 };
