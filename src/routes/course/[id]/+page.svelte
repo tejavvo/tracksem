@@ -1,6 +1,7 @@
 <script lang="ts">
     import type { PageProps } from "./$types";
     import { grades, computeCompPct } from "$lib/stores/grades.svelte";
+    import { getGradeColor, getLetterGrade } from "$lib/grading";
     import { goto } from "$app/navigation";
 
     let { data }: PageProps = $props();
@@ -8,25 +9,6 @@
     const course = $derived(grades.getCourse(data.courseId)!);
     const proj = $derived(grades.projectedGrade(data.courseId));
     const totalWeight = $derived(grades.totalWeight(data.courseId));
-
-    function getGradeColor(g: number | null): string {
-        if (g === null) return "#6b7280";
-        if (g >= 90) return "#4ade80";
-        if (g >= 80) return "#86efac";
-        if (g >= 65) return "#fbbf24";
-        if (g >= 50) return "#fb923c";
-        return "#f87171";
-    }
-
-    function getLetterGrade(g: number | null): string {
-        if (g === null) return "—";
-        if (g >= 90) return "S";
-        if (g >= 80) return "A";
-        if (g >= 70) return "B";
-        if (g >= 60) return "C";
-        if (g >= 50) return "D";
-        return "F";
-    }
 
     let expanded = $state<Set<string>>(new Set());
     function toggle(id: string) {
@@ -181,7 +163,12 @@
                             class="expand-btn"
                             class:has-sub={hasSubItems}
                             onclick={() => {
-                                if (hasSubItems) toggle(comp.id);
+                                if (hasSubItems) {
+                                    toggle(comp.id);
+                                } else {
+                                    grades.addSubItem(data.courseId, comp.id);
+                                    expanded = new Set([...expanded, comp.id]);
+                                }
                             }}
                         >
                             {#if hasSubItems}
@@ -189,7 +176,10 @@
                                     >›</span
                                 >
                             {:else}
-                                <span class="chevron-spacer"></span>
+                                <span
+                                    class="plus-expand mono"
+                                    title="add sub-items">⊕</span
+                                >
                             {/if}
                         </button>
 
@@ -742,7 +732,7 @@
         background: none;
         border: none;
         padding: 0;
-        cursor: default;
+        cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -763,9 +753,15 @@
         transform: rotate(90deg);
         color: oklch(0.7 0.02 265);
     }
-    .chevron-spacer {
-        width: 16px;
+    .plus-expand {
+        font-size: 0.95rem;
+        color: oklch(0.3 0.02 265);
         display: inline-block;
+        transition: color 0.15s;
+        line-height: 1;
+    }
+    .expand-btn:hover .plus-expand {
+        color: #4ade80;
     }
 
     /* Name */

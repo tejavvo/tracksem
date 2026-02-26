@@ -1,30 +1,12 @@
 <script lang="ts">
     import { grades, computeCompPct } from "$lib/stores/grades.svelte";
+    import { getGradeColor, getLetterGrade } from "$lib/grading";
     import type { Course } from "$lib/types";
 
     interface Props {
         course: Course;
     }
     let { course }: Props = $props();
-
-    function getGradeColor(grade: number | null): string {
-        if (grade === null) return "#6b7280";
-        if (grade >= 90) return "#4ade80";
-        if (grade >= 80) return "#86efac";
-        if (grade >= 65) return "#fbbf24";
-        if (grade >= 50) return "#fb923c";
-        return "#f87171";
-    }
-
-    function getLetterGrade(grade: number | null): string {
-        if (grade === null) return "—";
-        if (grade >= 90) return "S";
-        if (grade >= 80) return "A";
-        if (grade >= 70) return "B";
-        if (grade >= 60) return "C";
-        if (grade >= 50) return "D";
-        return "F";
-    }
 
     const proj = $derived(grades.projectedGrade(course.id));
     const totalWeight = $derived(grades.totalWeight(course.id));
