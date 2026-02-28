@@ -177,6 +177,153 @@ export async function getAllCourses(supabase: SupabaseClient, userId: string): P
     return fetchAllCourses(supabase);
 }
 
+/** Add a new course with default components (Quiz x2, Midsem, Endsem). */
+export async function addCourseWithDefaults(
+    supabase: SupabaseClient,
+    userId: string,
+    name: string,
+    fullName: string,
+    color: string
+): Promise<Course> {
+    const courseId = crypto.randomUUID();
+
+    const { error: courseErr } = await supabase.from('courses').insert({
+        id: courseId,
+        user_id: userId,
+        name,
+        full_name: fullName,
+        color
+    });
+    if (courseErr) throw courseErr;
+
+    const componentInserts: {
+        id: string;
+        course_id: string;
+        name: string;
+        weight: number;
+        max_score: number;
+        score: number | null;
+        best_of: number | null;
+        sort_order: number;
+    }[] = [];
+
+    const subItemInserts: {
+        id: string;
+        component_id: string;
+        name: string;
+        score: number | null;
+        max_score: number;
+        sort_order: number;
+    }[] = [];
+
+    const defaults = [
+        { name: 'Quiz', subItems: ['Quiz 1', 'Quiz 2'] },
+        { name: 'Midsem' },
+        { name: 'Endsem' }
+    ] as const;
+
+    const createdComponents: Component[] = [];
+
+    defaults.forEach((def, compIdx) => {
+        const compId = crypto.randomUUID();
+
+        componentInserts.push({
+            id: compId,
+            course_id: courseId,
+            name: def.name,
+            weight: 0,
+            max_score: 100,
+            score: null,
+            best_of: null,
+            sort_order: compIdx
+        });
+
+        const subItems: SubItem[] = [];
+        if ('subItems' in def && def.subItems) {
+            def.subItems.forEach((subName, si) => {
+                const subId = crypto.randomUUID();
+                subItemInserts.push({
+                    id: subId,
+                    component_id: compId,
+                    name: subName,
+                    score: null,
+                    max_score: 100,
+                    sort_order: si
+                });
+                subItems.push({
+                    id: subId,
+                    name: subName,
+                    score: null,
+                    maxScore: 100
+                });
+            });
+        }
+
+        createdComponents.push({
+            id: compId,
+            name: def.name,
+            weight: 0,
+            maxScore: 100,
+            score: null,
+            subItems: subItems.length > 0 ? subItems : undefined
+        });
+    });
+
+    if (componentInserts.length > 0) {
+        const { error } = await supabase.from('components').insert(componentInserts);
+        if (error) throw error;
+    }
+
+    if (subItemInserts.length > 0) {
+        const { error } = await supabase.from('sub_items').insert(subItemInserts);
+        if (error) throw error;
+    }
+
+    return {
+        id: courseId,
+        name,
+        fullName,
+        color,
+        components: createdComponents
+    };
+}
+
+/** Delete a course and its components/sub-items. */
+export async function deleteCourse(
+    supabase: SupabaseClient,
+    userId: string,
+    courseId: string
+): Promise<void> {
+    const { data: comps, error: compErr } = await supabase
+        .from('components')
+        .select('id')
+        .eq('course_id', courseId);
+
+    if (compErr) throw compErr;
+
+    const compIds = (comps ?? []).map((c) => c.id);
+    if (compIds.length > 0) {
+        const { error: subErr } = await supabase
+            .from('sub_items')
+            .delete()
+            .in('component_id', compIds);
+        if (subErr) throw subErr;
+    }
+
+    const { error: delCompErr } = await supabase
+        .from('components')
+        .delete()
+        .eq('course_id', courseId);
+    if (delCompErr) throw delCompErr;
+
+    const { error: courseErr } = await supabase
+        .from('courses')
+        .delete()
+        .eq('id', courseId)
+        .eq('user_id', userId);
+    if (courseErr) throw courseErr;
+}
+
 // ── Component mutations ────────────────────────────────────────────────────────
 
 const COMP_COL_MAP: Record<string, string> = {

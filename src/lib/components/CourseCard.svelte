@@ -12,9 +12,12 @@
     const totalWeight = $derived(grades.totalWeight(course.id));
     const gradeColor = $derived(getGradeColor(proj.grade));
     const letter = $derived(getLetterGrade(proj.grade));
+
+
 </script>
 
-<a href="/course/{course.id}" class="course-card group block">
+<div class="course-card group">
+    <a href="/course/{course.id}" class="card-link">
     <div class="card-inner" style="--accent: {course.color}">
         <!-- Header -->
         <div class="card-header">
@@ -78,13 +81,22 @@
             {/if}
         </div>
     </div>
-</a>
+    </a>
+
+</div>
 
 <style>
     .course-card {
+        position: relative;
+        display: block;
+    }
+
+    .card-link {
         text-decoration: none;
         display: block;
     }
+
+
 
     .card-inner {
         background: oklch(0.13 0.025 265);
