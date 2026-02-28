@@ -103,7 +103,7 @@
                         style="border-color: {gradeColor(overall.grade)}40; color: {gradeColor(overall.grade)}"
                     >
                         <span class="mono text-sm">avg {overall.grade.toFixed(1)}%</span>
-                        <span class="mono text-xs hide-mobile" style="opacity: 0.6">
+                        <span class="mono text-xs" style="opacity: 0.6">
                             across {overall.count} course{overall.count > 1 ? "s" : ""}
                         </span>
                     </div>
@@ -217,10 +217,6 @@
         gap: 1rem;
     }
 
-    .hide-mobile {
-        display: inline;
-    }
-
     .brand {
         display: flex;
         align-items: center;
@@ -319,7 +315,7 @@
 
     .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
         gap: 1rem;
     }
 
@@ -497,65 +493,61 @@
         margin-top: 2rem;
     }
 
-    /* ── Mobile responsive ───────────────────── */
-
-    @media (max-width: 640px) {
+    /* ── Mobile ≤ 768px ──────────────────────── */
+    @media (max-width: 768px) {
         .header {
             padding: 0.875rem 1rem;
         }
-
         .header-inner {
             flex-wrap: wrap;
             gap: 0.5rem;
         }
-
         .header-right {
-            gap: 0.5rem;
             flex-wrap: wrap;
+            gap: 0.5rem;
         }
-
         .overall-pill {
-            padding: 0.3rem 0.6rem;
-            gap: 0.35rem;
+            padding: 0.3rem 0.65rem;
         }
-
-        .hide-mobile {
-            display: none;
-        }
-
         .user-group {
             padding-left: 0;
             border-left: none;
         }
-
         .user-email {
-            max-width: 120px;
+            max-width: 140px;
             font-size: 0.62rem;
         }
-
         .main {
-            padding: 1rem;
+            padding: 1.25rem 0.75rem;
         }
-
         .grid {
-            grid-template-columns: 1fr;
-            gap: 0.75rem;
+            grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
         }
-
         .add-card {
+            min-height: 120px;
+        }
+        .add-card-closed {
             min-height: 80px;
         }
-
-        .add-card-closed {
-            min-height: 60px;
-        }
-
         .modal {
             padding: 1rem;
         }
-
         .modal-card {
             width: 100%;
+        }
+    }
+
+    /* ── Extra-small ≤ 480px ─────────────────── */
+    @media (max-width: 480px) {
+        .header {
+            padding: 0.75rem 0.65rem;
+        }
+        .main {
+            padding: 1rem 0.5rem;
+        }
+        .grid {
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
         }
     }
 </style>

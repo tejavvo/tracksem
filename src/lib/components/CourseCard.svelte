@@ -1,6 +1,6 @@
 <script lang="ts">
     import { grades, computeCompPct } from "$lib/stores/grades.svelte";
-    import { getGradeColor } from "$lib/grading";
+    import { getGradeColor, getLetterGrade } from "$lib/grading";
     import type { Course } from "$lib/types";
 
     interface Props {
@@ -8,20 +8,10 @@
     }
     let { course }: Props = $props();
 
+    const proj = $derived(grades.projectedGrade(course.id));
     const totalWeight = $derived(grades.totalWeight(course.id));
-    const filledWeight = $derived(
-        course.components.reduce(
-            (sum, comp) =>
-                computeCompPct(comp) !== null ? sum + comp.weight : sum,
-            0,
-        ),
-    );
-    const earnedWeight = $derived(
-        course.components.reduce((sum, comp) => {
-            const pct = computeCompPct(comp);
-            return pct !== null ? sum + (pct * comp.weight) / 100 : sum;
-        }, 0),
-    );
+    const gradeColor = $derived(getGradeColor(proj.grade));
+    const letter = $derived(getLetterGrade(proj.grade));
 
 
 </script>
@@ -37,24 +27,20 @@
             >
                 {course.name}
             </div>
-            <div class="grade-badge" style="--g-color: {course.color}">
-                <span class="letter mono">
-                    {filledWeight > 0
-                        ? `${Math.round((earnedWeight / filledWeight) * 100)}%`
-                        : "—"}
-                </span>
+            <div class="grade-badge" style="--g-color: {gradeColor}">
+                <span class="letter mono">{letter}</span>
             </div>
         </div>
 
         <div class="full-name">{course.fullName}</div>
 
-        <!-- Earned vs tested weight display -->
+        <!-- Projected grade display -->
         <div class="grade-display">
-            {#if filledWeight > 0}
-                <span class="grade-num mono" style="color: {course.color}"
-                    >{earnedWeight.toFixed(1)}</span
+            {#if proj.grade !== null}
+                <span class="grade-num mono" style="color: {gradeColor}"
+                    >{proj.grade.toFixed(1)}</span
                 >
-                <span class="grade-suffix mono">/ {filledWeight.toFixed(0)}%</span>
+                <span class="grade-suffix">%</span>
             {:else}
                 <span class="grade-empty mono">no scores yet</span>
             {/if}
@@ -86,7 +72,7 @@
         <!-- Footer -->
         <div class="card-footer">
             <span class="mono text-xs" style="color: {course.color}60">
-                tested: {filledWeight.toFixed(0)}%
+                {proj.filled}/{proj.total} graded
             </span>
             {#if totalWeight !== 100}
                 <span class="mono text-xs" style="color: #fb923c"
@@ -229,75 +215,6 @@
         grid-template-columns: 1fr 80px 32px;
         align-items: center;
         gap: 0.5rem;
-    }
-
-    /* ── Mobile responsive ───────────────────── */
-
-    @media (max-width: 640px) {
-        .card-inner {
-            padding: 1rem;
-            gap: 0.65rem;
-        }
-
-        .course-tag {
-            font-size: 0.65rem;
-            padding: 0.1rem 0.4rem;
-        }
-
-        .grade-badge {
-            width: 32px;
-            height: 32px;
-            border-radius: 6px;
-        }
-
-        .letter {
-            font-size: 0.85rem;
-        }
-
-        .full-name {
-            font-size: 0.7rem;
-        }
-
-        .grade-num {
-            font-size: 1.5rem;
-        }
-
-        .grade-suffix {
-            font-size: 0.78rem;
-        }
-
-        .bar-row {
-            grid-template-columns: 1fr 60px 28px;
-            gap: 0.35rem;
-        }
-
-        .bar-label {
-            font-size: 0.6rem;
-        }
-
-        .bar-weight {
-            font-size: 0.55rem;
-        }
-
-        .card-footer {
-            padding-top: 0.4rem;
-        }
-    }
-
-    @media (max-width: 380px) {
-        .card-inner {
-            padding: 0.85rem;
-            gap: 0.5rem;
-        }
-
-        .bar-row {
-            grid-template-columns: 1fr 50px 24px;
-            gap: 0.25rem;
-        }
-
-        .grade-num {
-            font-size: 1.3rem;
-        }
     }
 
     .bar-label {

@@ -66,14 +66,13 @@
   }
   html {
     color-scheme: dark;
-  }
-  html, body {
     overflow-x: hidden;
   }
   body {
     @apply bg-background text-foreground;
     font-family: 'Inter', system-ui, sans-serif;
     min-height: 100vh;
+    overflow-x: hidden;
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
     background-image:
@@ -99,8 +98,8 @@
 
   .mono { font-family: 'JetBrains Mono', monospace; }
 
-  /* Prevent iOS zoom on input focus (requires >= 16px font-size) */
-  @media (pointer: coarse) {
+  /* Prevent iOS zoom on input focus */
+  @media screen and (max-width: 768px) {
     input[type="email"],
     input[type="password"],
     input[type="text"],

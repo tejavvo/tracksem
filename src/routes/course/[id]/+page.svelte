@@ -10,23 +10,6 @@
     const course = $derived(grades.getCourse(data.courseId));
     const proj = $derived(grades.projectedGrade(data.courseId));
     const totalWeight = $derived(grades.totalWeight(data.courseId));
-    const filledWeight = $derived(
-        course
-            ? course.components.reduce(
-                  (sum, comp) =>
-                      computeCompPct(comp) !== null ? sum + comp.weight : sum,
-                  0,
-              )
-            : 0,
-    );
-    const earnedWeight = $derived(
-        course
-            ? course.components.reduce((sum, comp) => {
-                  const pct = computeCompPct(comp);
-                  return pct !== null ? sum + (pct * comp.weight) / 100 : sum;
-              }, 0)
-            : 0,
-    );
 
     let expanded = $state<Set<string>>(new Set());
     function toggle(id: string) {
@@ -114,7 +97,7 @@
             <div class="header-actions">
                 {#if confirmReset}
                     <span class="mono text-xs" style="color: #fb923c"
-                        >reset?</span
+                        >reset to defaults?</span
                     >
                     <button
                         class="action-btn danger mono text-xs"
@@ -137,12 +120,12 @@
                     class="action-btn danger mono text-xs"
                     disabled={deletingCourse}
                     onclick={handleDeleteCourse}
-                    >{deletingCourse ? "deleting..." : "delete"}</button
+                    >{deletingCourse ? "deleting..." : "delete course"}</button
                 >
                 <button
                     class="action-btn add mono text-xs"
                     onclick={() => grades.addComponent(data.courseId)}
-                    >+ add</button
+                    >+ add component</button
                 >
             </div>
         </div>
@@ -151,47 +134,38 @@
     <main class="main">
         <!-- Grade hero -->
         <div class="hero" style="--accent: {course.color}">
-            <div class="hero-top-row">
-                <div class="hero-left">
-                    <div
-                        class="course-chip mono"
-                        style="color: {course.color}; border-color: {course.color}30"
-                    >
-                        {course.name}
-                    </div>
-                    <h1 class="course-fullname">{course.fullName}</h1>
+            <div class="hero-left">
+                <div
+                    class="course-chip mono"
+                    style="color: {course.color}; border-color: {course.color}30"
+                >
+                    {course.name}
                 </div>
-                <div class="hero-grade">
-                    <div class="letter-grade mono" style="color: {gradeColor}">
-                        {getLetterGrade(proj.grade)}
-                    </div>
-                    {#if proj.grade !== null}
-                        <div class="pct-grade mono" style="color: {gradeColor}">
-                            {proj.grade.toFixed(2)}%
-                        </div>
-                        <div class="grade-note">projected</div>
+                <h1 class="course-fullname">{course.fullName}</h1>
+                <div class="meta mono">
+                    {proj.filled}/{proj.total} components graded
+                    {#if totalWeight !== 100}
+                        · <span style="color: #fb923c"
+                            >⚠ weights sum to {totalWeight}%</span
+                        >
                     {:else}
-                        <div class="grade-note">enter scores</div>
+                        · <span style="color: oklch(0.4 0.02 265)"
+                            >weights OK</span
+                        >
                     {/if}
                 </div>
             </div>
-            <div class="meta mono">
-                {proj.filled}/{proj.total} graded
-                {#if filledWeight > 0}
-                    · <span class="earned-line">earned {earnedWeight.toFixed(1)}/{filledWeight.toFixed(0)}%</span>
+            <div class="hero-grade">
+                <div class="letter-grade mono" style="color: {gradeColor}">
+                    {getLetterGrade(proj.grade)}
+                </div>
+                {#if proj.grade !== null}
+                    <div class="pct-grade mono" style="color: {gradeColor}">
+                        {proj.grade.toFixed(2)}%
+                    </div>
+                    <div class="grade-note">projected</div>
                 {:else}
-                    · <span style="color: oklch(0.4 0.02 265)"
-                        >no scores yet</span
-                    >
-                {/if}
-                {#if totalWeight !== 100}
-                    · <span style="color: #fb923c"
-                        >⚠ {totalWeight}%</span
-                    >
-                {:else}
-                    · <span style="color: oklch(0.4 0.02 265)"
-                        >weights OK</span
-                    >
+                    <div class="grade-note">enter scores to see projection</div>
                 {/if}
             </div>
         </div>
@@ -276,20 +250,8 @@
                             {/if}
                         </div>
 
-                        <!-- Remove (mobile: top-right) -->
-                        <button
-                            class="remove-btn"
-                            onclick={() =>
-                                grades.removeComponent(data.courseId, comp.id)}
-                            title="remove">×</button
-                        >
-                    </div>
-
-                    <!-- Values row (weight, score, pct, contrib) -->
-                    <div class="comp-values-row">
                         <!-- Weight -->
                         <div class="comp-cell weight-cell">
-                            <span class="cell-label mono">wt</span>
                             <input
                                 class="num-input mono"
                                 type="number"
@@ -309,7 +271,6 @@
                         <!-- Score -->
                         <div class="comp-cell score-cell">
                             {#if !hasSubItems}
-                                <span class="cell-label mono">score</span>
                                 <input
                                     class="num-input mono score-input"
                                     type="number"
@@ -385,6 +346,14 @@
                         >
                             {contrib !== null ? contrib.toFixed(2) + "%" : "—"}
                         </div>
+
+                        <!-- Remove -->
+                        <button
+                            class="remove-btn"
+                            onclick={() =>
+                                grades.removeComponent(data.courseId, comp.id)}
+                            title="remove">×</button
+                        >
                     </div>
 
                     <!-- Sub-items panel -->
@@ -393,7 +362,7 @@
                             <div class="best-of-row mono">
                                 <span class="dimmed">scoring:</span>
                                 {#if comp.bestOf !== undefined}
-                                    <span class="best-of-inline">best
+                                    best
                                     <input
                                         class="bestof-input mono"
                                         type="number"
@@ -408,7 +377,7 @@
                                                 comp.subItems!.length,
                                             )}
                                     />
-                                    of {comp.subItems!.length}</span>
+                                    of {comp.subItems!.length}
                                     <button
                                         class="pill-btn mono"
                                         onclick={() =>
@@ -416,10 +385,10 @@
                                                 data.courseId,
                                                 comp.id,
                                                 undefined,
-                                            )}>→ all</button
+                                            )}>→ use all</button
                                     >
                                 {:else}
-                                    <span class="best-of-inline">avg of all {comp.subItems!.length}</span>
+                                    average of all {comp.subItems!.length}
                                     <button
                                         class="pill-btn mono"
                                         onclick={() =>
@@ -430,11 +399,11 @@
                                                     1,
                                                     comp.subItems!.length - 1,
                                                 ),
-                                            )}>→ best-of</button
+                                            )}>→ set best-of</button
                                     >
                                 {/if}
-                                <span class="dimmed best-of-worth"
-                                    >each {comp.subItems!.length > 0
+                                <span class="dimmed" style="margin-left: auto;"
+                                    >each worth {comp.subItems!.length > 0
                                         ? (
                                               comp.weight /
                                               comp.subItems!.length
@@ -450,107 +419,103 @@
                                         : null}
                                 {@const subColor = getGradeColor(subPct)}
                                 <div class="sub-row">
-                                    <div class="sub-top-row">
-                                        <div class="sub-name-cell">
-                                            {#if editingSubName === sub.id}
-                                                <input
-                                                    class="name-input mono"
-                                                    value={sub.name}
-                                                    use:focusOnMount
-                                                    onblur={(e) => {
-                                                        grades.updateSubName(
-                                                            data.courseId,
-                                                            comp.id,
-                                                            sub.id,
-                                                            (
-                                                                e.target as HTMLInputElement
-                                                            ).value,
-                                                        );
-                                                        editingSubName = null;
-                                                    }}
-                                                    onkeydown={(e) => {
-                                                        if (e.key === "Enter")
-                                                            (
-                                                                e.target as HTMLInputElement
-                                                            ).blur();
-                                                    }}
-                                                />
-                                            {:else}
-                                                <button
-                                                    class="name-display mono small"
-                                                    onclick={() =>
-                                                        (editingSubName = sub.id)}
+                                    <div class="sub-name-cell">
+                                        {#if editingSubName === sub.id}
+                                            <input
+                                                class="name-input mono"
+                                                value={sub.name}
+                                                use:focusOnMount
+                                                onblur={(e) => {
+                                                    grades.updateSubName(
+                                                        data.courseId,
+                                                        comp.id,
+                                                        sub.id,
+                                                        (
+                                                            e.target as HTMLInputElement
+                                                        ).value,
+                                                    );
+                                                    editingSubName = null;
+                                                }}
+                                                onkeydown={(e) => {
+                                                    if (e.key === "Enter")
+                                                        (
+                                                            e.target as HTMLInputElement
+                                                        ).blur();
+                                                }}
+                                            />
+                                        {:else}
+                                            <button
+                                                class="name-display mono small"
+                                                onclick={() =>
+                                                    (editingSubName = sub.id)}
+                                            >
+                                                {sub.name}<span
+                                                    class="edit-hint">✏</span
                                                 >
-                                                    {sub.name}<span
-                                                        class="edit-hint">✏</span
-                                                    >
-                                                </button>
-                                            {/if}
-                                        </div>
+                                            </button>
+                                        {/if}
+                                    </div>
 
-                                        <button
-                                            class="remove-btn small"
-                                            onclick={() =>
-                                                grades.removeSubItem(
-                                                    data.courseId,
+                                    <div class="sub-score-cell">
+                                        <input
+                                            class="num-input mono score-input"
+                                            type="number"
+                                            min="0"
+                                            max={sub.maxScore}
+                                            step="0.5"
+                                            placeholder="—"
+                                            value={sub.score ?? ""}
+                                            oninput={(e) =>
+                                                handleSubScore(
                                                     comp.id,
                                                     sub.id,
+                                                    (
+                                                        e.target as HTMLInputElement
+                                                    ).value,
                                                 )}
-                                            title="remove">×</button
-                                        >
+                                        />
+                                        <span class="unit mono">/ </span>
+                                        <input
+                                            class="num-input mono max-input"
+                                            type="number"
+                                            min="1"
+                                            step="1"
+                                            value={sub.maxScore}
+                                            oninput={(e) =>
+                                                handleSubMax(
+                                                    comp.id,
+                                                    sub.id,
+                                                    (
+                                                        e.target as HTMLInputElement
+                                                    ).value,
+                                                )}
+                                        />
                                     </div>
 
-                                    <div class="sub-bottom-row">
-                                        <div class="sub-score-cell">
-                                            <input
-                                                class="num-input mono score-input"
-                                                type="number"
-                                                min="0"
-                                                max={sub.maxScore}
-                                                step="0.5"
-                                                placeholder="—"
-                                                value={sub.score ?? ""}
-                                                oninput={(e) =>
-                                                    handleSubScore(
-                                                        comp.id,
-                                                        sub.id,
-                                                        (
-                                                            e.target as HTMLInputElement
-                                                        ).value,
-                                                    )}
-                                            />
-                                            <span class="unit mono">/ </span>
-                                            <input
-                                                class="num-input mono max-input"
-                                                type="number"
-                                                min="1"
-                                                step="1"
-                                                value={sub.maxScore}
-                                                oninput={(e) =>
-                                                    handleSubMax(
-                                                        comp.id,
-                                                        sub.id,
-                                                        (
-                                                            e.target as HTMLInputElement
-                                                        ).value,
-                                                    )}
-                                            />
-                                        </div>
-
-                                        <div class="sub-pct-cell">
-                                            {#if subPct !== null}
-                                                <span
-                                                    class="mono text-xs"
-                                                    style="color: {subColor}"
-                                                    >{subPct.toFixed(1)}%</span
-                                                >
-                                            {:else}
-                                                <span class="dimmed mono text-xs"
-                                                    >—</span
-                                                >
-                                            {/if}
-                                        </div>
+                                    <div class="sub-pct-cell">
+                                        {#if subPct !== null}
+                                            <span
+                                                class="mono text-xs"
+                                                style="color: {subColor}"
+                                                >{subPct.toFixed(1)}%</span
+                                            >
+                                        {:else}
+                                            <span class="dimmed mono text-xs"
+                                                >—</span
+                                            >
+                                        {/if}
                                     </div>
+
+                                    <button
+                                        class="remove-btn small"
+                                        onclick={() =>
+                                            grades.removeSubItem(
+                                                data.courseId,
+                                                comp.id,
+                                                sub.id,
+                                            )}
+                                        title="remove">×</button
+                                    >
                                 </div>
                             {/each}
 
@@ -625,13 +590,11 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 0.5rem;
     }
     .nav-left {
         display: flex;
         align-items: center;
         gap: 1rem;
-        min-width: 0;
     }
 
     .back-btn {
@@ -642,7 +605,6 @@
         border-radius: 5px;
         padding: 0.3rem 0.7rem;
         cursor: pointer;
-        flex-shrink: 0;
         transition:
             color 0.15s,
             border-color 0.15s;
@@ -655,16 +617,11 @@
         font-size: 0.75rem;
         display: flex;
         gap: 0.4rem;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
     }
     .header-actions {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        flex-shrink: 0;
     }
 
     .action-btn {
@@ -674,7 +631,6 @@
         padding: 0.3rem 0.7rem;
         color: oklch(0.7 0.02 265);
         cursor: pointer;
-        white-space: nowrap;
         transition: all 0.15s;
     }
     .action-btn:hover {
@@ -704,8 +660,8 @@
     /* Hero */
     .hero {
         display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
+        justify-content: space-between;
+        align-items: flex-start;
         margin-bottom: 2rem;
         padding: 1.5rem;
         background: oklch(0.12 0.025 265);
@@ -729,16 +685,6 @@
         );
         opacity: 0.5;
     }
-    .hero-top-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 1rem;
-    }
-    .hero-left {
-        min-width: 0;
-        flex: 1;
-    }
     .course-chip {
         font-size: 0.65rem;
         font-weight: 700;
@@ -754,22 +700,14 @@
         font-size: 1.4rem;
         font-weight: 600;
         letter-spacing: -0.02em;
-        margin: 0;
+        margin: 0 0 0.4rem;
     }
     .meta {
         font-size: 0.7rem;
         color: oklch(0.5 0.02 265);
-        line-height: 1.6;
-    }
-    .earned-line {
-        font-size: 0.95rem;
-        font-weight: 700;
-        color: oklch(0.9 0.01 265);
-        letter-spacing: -0.01em;
     }
     .hero-grade {
         text-align: right;
-        flex-shrink: 0;
     }
     .letter-grade {
         font-size: 3.5rem;
@@ -813,31 +751,13 @@
         border-color: oklch(1 0 0 / 14%);
     }
 
-    /* Top row: expand + name + remove */
     .comp-row {
-        display: flex;
+        display: grid;
+        grid-template-columns: 28px 1fr 100px 180px 140px 70px 32px;
         align-items: center;
         gap: 0.5rem;
         padding: 0.65rem 0.75rem;
-        padding-bottom: 0;
-        min-height: 36px;
-    }
-
-    /* Values row: weight, score, pct, contrib */
-    .comp-values-row {
-        display: grid;
-        grid-template-columns: auto 1fr auto auto;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.35rem 0.75rem 0.65rem;
-    }
-
-    .cell-label {
-        display: none;
-        font-size: 0.6rem;
-        color: oklch(0.4 0.02 265);
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
+        min-height: 52px;
     }
 
     /* Expand button */
@@ -849,8 +769,6 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        flex-shrink: 0;
-        width: 28px;
     }
     .expand-btn.has-sub {
         cursor: pointer;
@@ -882,8 +800,6 @@
     /* Name */
     .comp-name-cell {
         overflow: hidden;
-        flex: 1;
-        min-width: 0;
     }
     .name-display {
         background: none;
@@ -1012,7 +928,6 @@
         align-items: flex-end;
         gap: 0.2rem;
         width: 100%;
-        min-width: 60px;
     }
     .bar-track {
         width: 100%;
@@ -1039,7 +954,6 @@
         padding: 0.1rem 0.35rem;
         border-radius: 4px;
         line-height: 1;
-        flex-shrink: 0;
         transition:
             color 0.15s,
             background 0.15s;
@@ -1065,20 +979,11 @@
         display: flex;
         align-items: center;
         gap: 0.4rem;
-        flex-wrap: wrap;
         font-size: 0.7rem;
         color: oklch(0.65 0.02 265);
         padding: 0.4rem 0;
         border-bottom: 1px solid oklch(1 0 0 / 6%);
         margin-bottom: 0.25rem;
-    }
-    .best-of-inline {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.25rem;
-    }
-    .best-of-worth {
-        margin-left: auto;
     }
     .bestof-input {
         width: 40px;
@@ -1113,33 +1018,20 @@
         background: oklch(1 0 0 / 12%);
         color: oklch(0.85 0.01 265);
     }
-
-    /* Sub-row: now uses flex layout for mobile-friendliness */
     .sub-row {
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-        padding: 0.4rem 0.25rem;
+        display: grid;
+        grid-template-columns: 1fr 200px 70px 28px;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.3rem 0.25rem;
         border-radius: 5px;
         transition: background 0.1s;
     }
     .sub-row:hover {
         background: oklch(1 0 0 / 3%);
     }
-    .sub-top-row {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    .sub-bottom-row {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
     .sub-name-cell {
         overflow: hidden;
-        flex: 1;
-        min-width: 0;
     }
     .sub-score-cell {
         display: flex;
@@ -1149,7 +1041,6 @@
     }
     .sub-pct-cell {
         text-align: right;
-        flex-shrink: 0;
     }
     .add-sub-btn {
         margin-top: 0.35rem;
@@ -1179,8 +1070,7 @@
         font-size: 0.72rem;
         color: oklch(0.5 0.02 265);
         display: flex;
-        flex-wrap: wrap;
-        gap: 1rem 2rem;
+        gap: 2rem;
     }
     .add-full-btn {
         width: 100%;
@@ -1200,233 +1090,162 @@
         color: #4ade80;
     }
 
-    /* ── Desktop: restore the original inline grid layout ─── */
-    @media (min-width: 769px) {
-        .comp-row {
-            display: grid;
-            grid-template-columns: 28px 1fr 32px;
-            padding-bottom: 0;
-        }
-
-        .comp-values-row {
-            grid-template-columns: 100px 180px 140px 70px;
-            padding-left: calc(0.75rem + 28px + 0.5rem);
-        }
-
-        .sub-row {
-            flex-direction: row;
-            align-items: center;
-        }
-        .sub-top-row {
-            flex: 1;
-            min-width: 0;
-        }
-        .sub-bottom-row {
-            flex-shrink: 0;
-        }
-    }
-
-    /* ── Mobile-specific styles ─────────────── */
+    /* ── Mobile ≤ 768px ──────────────────────── */
     @media (max-width: 768px) {
         .header {
-            padding: 0.75rem 0.75rem;
+            padding: 0.75rem 1rem;
         }
-
         .header-inner {
             flex-wrap: wrap;
             gap: 0.5rem;
         }
-
         .nav-left {
-            width: 100%;
+            flex: 1;
+            min-width: 0;
             gap: 0.5rem;
         }
-
         .breadcrumb {
-            font-size: 0.68rem;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
-
         .header-actions {
             width: 100%;
             flex-wrap: wrap;
             gap: 0.35rem;
         }
-
         .action-btn {
             padding: 0.25rem 0.5rem;
-            font-size: 0.65rem;
         }
-
         .main {
-            padding: 1rem 0.75rem;
+            padding: 1.25rem 0.75rem;
         }
 
-        /* Hero mobile */
+        /* Hero — stack vertically */
         .hero {
-            padding: 1rem;
-            margin-bottom: 1.25rem;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
         }
-
-        .hero-top-row {
-            gap: 0.5rem;
+        .hero-grade {
+            text-align: left;
+            display: flex;
+            align-items: baseline;
+            gap: 0.6rem;
         }
-
-        .course-fullname {
-            font-size: 1.1rem;
-        }
-
         .letter-grade {
             font-size: 2.5rem;
         }
-
         .pct-grade {
-            font-size: 0.9rem;
+            font-size: 1rem;
+        }
+        .grade-note {
+            display: none;
+        }
+        .course-fullname {
+            font-size: 1.15rem;
         }
 
-        .meta {
-            font-size: 0.65rem;
-        }
-
-        /* Component cards mobile — stack vertically */
+        /* ── Folded component card ────────────── */
         .comp-row {
-            display: flex;
-            flex-wrap: nowrap;
-            gap: 0.35rem;
-            padding: 0.5rem 0.6rem;
-            padding-bottom: 0.15rem;
+            /*
+             * Original 7 cols: expand | name | weight | score | pct | contrib | remove
+             * Fold into 3 rows:
+             *   Row 1:  expand  name .............. weight   remove
+             *   Row 2:          score-area           pct-area
+             *   Row 3:          contrib-area
+             */
+            display: grid;
+            grid-template-columns: 28px 1fr auto auto 28px;
+            grid-template-rows: auto auto auto;
+            gap: 0.3rem 0.4rem;
+            padding: 0.6rem 0.65rem;
+            min-height: unset;
         }
 
-        .comp-values-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            padding: 0.25rem 0.6rem 0.5rem;
-        }
+        /* Row 1 */
+        .expand-btn   { grid-column: 1; grid-row: 1; }
+        .comp-name-cell { grid-column: 2; grid-row: 1; }
+        .weight-cell  { grid-column: 3 / 5; grid-row: 1; }
+        .remove-btn   { grid-column: 5; grid-row: 1; align-self: center; }
 
-        .cell-label {
-            display: inline;
-        }
+        /* Row 2 */
+        .score-cell   { grid-column: 2 / 4; grid-row: 2; justify-content: flex-start; }
+        .pct-cell     { grid-column: 4 / 6; grid-row: 2; justify-content: flex-end; }
 
-        .weight-cell {
-            justify-content: flex-start;
-        }
-
-        .score-cell {
-            justify-content: flex-start;
-        }
-
-        .pct-cell {
-            flex: 1;
-            min-width: 60px;
-        }
-
-        .contrib-cell {
-            justify-content: flex-start;
-        }
+        /* Row 3 */
+        .contrib-cell { grid-column: 2 / 6; grid-row: 3; justify-content: flex-start; font-size: 0.65rem; }
 
         .bar-stack {
             min-width: 50px;
         }
-
         .num-input {
-            width: 48px;
-            font-size: 0.72rem;
-            padding: 0.25rem 0.3rem;
+            width: 50px;
         }
-
         .max-input {
-            width: 40px;
+            width: 42px;
         }
 
-        .name-display {
-            font-size: 0.75rem;
-        }
-
-        .sub-count {
-            font-size: 0.55rem;
-        }
-
-        /* Sub-panel mobile */
+        /* ── Folded sub-rows ──────────────────── */
         .sub-panel {
-            padding: 0.5rem 0.5rem 0.75rem 1rem;
+            padding-left: 1rem;
+            padding-right: 0.5rem;
         }
-
         .best-of-row {
-            font-size: 0.65rem;
-            gap: 0.3rem;
-        }
-
-        .best-of-worth {
-            margin-left: 0;
-            width: 100%;
+            flex-wrap: wrap;
         }
 
         .sub-row {
-            flex-direction: column;
-            gap: 0.2rem;
-            padding: 0.3rem 0.2rem;
+            /*
+             * Original 4 cols: name | score | pct | remove
+             * Fold into 2 rows:
+             *   Row 1:  name ............ pct   remove
+             *   Row 2:  score-area
+             */
+            display: grid;
+            grid-template-columns: 1fr auto 28px;
+            grid-template-rows: auto auto;
+            gap: 0.2rem 0.4rem;
+            padding: 0.35rem 0.25rem;
         }
 
-        .sub-top-row {
-            width: 100%;
-        }
+        .sub-name-cell  { grid-column: 1; grid-row: 1; }
+        .sub-pct-cell   { grid-column: 2; grid-row: 1; align-self: center; }
+        .sub-row > .remove-btn { grid-column: 3; grid-row: 1; align-self: center; }
+        .sub-score-cell { grid-column: 1 / 4; grid-row: 2; justify-content: flex-start; }
 
-        .sub-bottom-row {
-            width: 100%;
-            padding-left: 0;
-        }
-
-        .sub-score-cell {
-            flex: 1;
-        }
-
-        .name-display.small {
-            font-size: 0.68rem;
-        }
-
-        /* Totals mobile */
+        /* Totals */
         .totals {
-            gap: 0.5rem 1rem;
+            flex-wrap: wrap;
+            gap: 0.5rem 1.5rem;
         }
     }
 
-    /* Extra-small screens */
-    @media (max-width: 400px) {
+    /* ── Extra-small ≤ 480px ─────────────────── */
+    @media (max-width: 480px) {
         .header {
-            padding: 0.6rem 0.5rem;
+            padding: 0.6rem 0.65rem;
         }
-
         .main {
-            padding: 0.75rem 0.5rem;
+            padding: 1rem 0.5rem;
         }
-
         .hero {
-            padding: 0.75rem;
+            padding: 1rem;
         }
-
         .course-fullname {
             font-size: 1rem;
         }
-
         .letter-grade {
             font-size: 2rem;
         }
-
-        .comp-row {
-            padding: 0.4rem 0.5rem;
-        }
-
-        .comp-values-row {
-            padding: 0.25rem 0.5rem 0.5rem;
-        }
-
         .num-input {
-            width: 44px;
-            font-size: 0.68rem;
+            width: 46px;
+            font-size: 0.7rem;
         }
-
         .max-input {
-            width: 36px;
+            width: 38px;
         }
     }
 </style>
