@@ -10,6 +10,23 @@
     const course = $derived(grades.getCourse(data.courseId));
     const proj = $derived(grades.projectedGrade(data.courseId));
     const totalWeight = $derived(grades.totalWeight(data.courseId));
+    const filledWeight = $derived(
+        course
+            ? course.components.reduce(
+                  (sum, comp) =>
+                      computeCompPct(comp) !== null ? sum + comp.weight : sum,
+                  0,
+              )
+            : 0,
+    );
+    const earnedWeight = $derived(
+        course
+            ? course.components.reduce((sum, comp) => {
+                  const pct = computeCompPct(comp);
+                  return pct !== null ? sum + (pct * comp.weight) / 100 : sum;
+              }, 0)
+            : 0,
+    );
 
     let expanded = $state<Set<string>>(new Set());
     function toggle(id: string) {
@@ -144,6 +161,13 @@
                 <h1 class="course-fullname">{course.fullName}</h1>
                 <div class="meta mono">
                     {proj.filled}/{proj.total} components graded
+                    {#if filledWeight > 0}
+                        · <span class="earned-line">earned {earnedWeight.toFixed(1)}/{filledWeight.toFixed(0)}%</span>
+                    {:else}
+                        · <span style="color: oklch(0.4 0.02 265)"
+                            >no scores yet</span
+                        >
+                    {/if}
                     {#if totalWeight !== 100}
                         · <span style="color: #fb923c"
                             >⚠ weights sum to {totalWeight}%</span
@@ -705,6 +729,12 @@
     .meta {
         font-size: 0.7rem;
         color: oklch(0.5 0.02 265);
+    }
+    .earned-line {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: oklch(0.9 0.01 265);
+        letter-spacing: -0.01em;
     }
     .hero-grade {
         text-align: right;

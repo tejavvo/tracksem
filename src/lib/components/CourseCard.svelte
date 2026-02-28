@@ -1,6 +1,6 @@
 <script lang="ts">
     import { grades, computeCompPct } from "$lib/stores/grades.svelte";
-    import { getGradeColor, getLetterGrade } from "$lib/grading";
+    import { getGradeColor } from "$lib/grading";
     import type { Course } from "$lib/types";
 
     interface Props {
@@ -8,10 +8,20 @@
     }
     let { course }: Props = $props();
 
-    const proj = $derived(grades.projectedGrade(course.id));
     const totalWeight = $derived(grades.totalWeight(course.id));
-    const gradeColor = $derived(getGradeColor(proj.grade));
-    const letter = $derived(getLetterGrade(proj.grade));
+    const filledWeight = $derived(
+        course.components.reduce(
+            (sum, comp) =>
+                computeCompPct(comp) !== null ? sum + comp.weight : sum,
+            0,
+        ),
+    );
+    const earnedWeight = $derived(
+        course.components.reduce((sum, comp) => {
+            const pct = computeCompPct(comp);
+            return pct !== null ? sum + (pct * comp.weight) / 100 : sum;
+        }, 0),
+    );
 
 
 </script>
@@ -27,20 +37,24 @@
             >
                 {course.name}
             </div>
-            <div class="grade-badge" style="--g-color: {gradeColor}">
-                <span class="letter mono">{letter}</span>
+            <div class="grade-badge" style="--g-color: {course.color}">
+                <span class="letter mono">
+                    {filledWeight > 0
+                        ? `${Math.round((earnedWeight / filledWeight) * 100)}%`
+                        : "—"}
+                </span>
             </div>
         </div>
 
         <div class="full-name">{course.fullName}</div>
 
-        <!-- Projected grade display -->
+        <!-- Earned vs tested weight display -->
         <div class="grade-display">
-            {#if proj.grade !== null}
-                <span class="grade-num mono" style="color: {gradeColor}"
-                    >{proj.grade.toFixed(1)}</span
+            {#if filledWeight > 0}
+                <span class="grade-num mono" style="color: {course.color}"
+                    >{earnedWeight.toFixed(1)}</span
                 >
-                <span class="grade-suffix">%</span>
+                <span class="grade-suffix mono">/ {filledWeight.toFixed(0)}%</span>
             {:else}
                 <span class="grade-empty mono">no scores yet</span>
             {/if}
@@ -72,7 +86,7 @@
         <!-- Footer -->
         <div class="card-footer">
             <span class="mono text-xs" style="color: {course.color}60">
-                {proj.filled}/{proj.total} graded
+                tested: {filledWeight.toFixed(0)}%
             </span>
             {#if totalWeight !== 100}
                 <span class="mono text-xs" style="color: #fb923c"
