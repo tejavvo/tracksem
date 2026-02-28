@@ -114,7 +114,7 @@
             <div class="header-actions">
                 {#if confirmReset}
                     <span class="mono text-xs" style="color: #fb923c"
-                        >reset to defaults?</span
+                        >reset?</span
                     >
                     <button
                         class="action-btn danger mono text-xs"
@@ -137,12 +137,12 @@
                     class="action-btn danger mono text-xs"
                     disabled={deletingCourse}
                     onclick={handleDeleteCourse}
-                    >{deletingCourse ? "deleting..." : "delete course"}</button
+                    >{deletingCourse ? "deleting..." : "delete"}</button
                 >
                 <button
                     class="action-btn add mono text-xs"
                     onclick={() => grades.addComponent(data.courseId)}
-                    >+ add component</button
+                    >+ add</button
                 >
             </div>
         </div>
@@ -151,45 +151,47 @@
     <main class="main">
         <!-- Grade hero -->
         <div class="hero" style="--accent: {course.color}">
-            <div class="hero-left">
-                <div
-                    class="course-chip mono"
-                    style="color: {course.color}; border-color: {course.color}30"
-                >
-                    {course.name}
+            <div class="hero-top-row">
+                <div class="hero-left">
+                    <div
+                        class="course-chip mono"
+                        style="color: {course.color}; border-color: {course.color}30"
+                    >
+                        {course.name}
+                    </div>
+                    <h1 class="course-fullname">{course.fullName}</h1>
                 </div>
-                <h1 class="course-fullname">{course.fullName}</h1>
-                <div class="meta mono">
-                    {proj.filled}/{proj.total} components graded
-                    {#if filledWeight > 0}
-                        · <span class="earned-line">earned {earnedWeight.toFixed(1)}/{filledWeight.toFixed(0)}%</span>
+                <div class="hero-grade">
+                    <div class="letter-grade mono" style="color: {gradeColor}">
+                        {getLetterGrade(proj.grade)}
+                    </div>
+                    {#if proj.grade !== null}
+                        <div class="pct-grade mono" style="color: {gradeColor}">
+                            {proj.grade.toFixed(2)}%
+                        </div>
+                        <div class="grade-note">projected</div>
                     {:else}
-                        · <span style="color: oklch(0.4 0.02 265)"
-                            >no scores yet</span
-                        >
-                    {/if}
-                    {#if totalWeight !== 100}
-                        · <span style="color: #fb923c"
-                            >⚠ weights sum to {totalWeight}%</span
-                        >
-                    {:else}
-                        · <span style="color: oklch(0.4 0.02 265)"
-                            >weights OK</span
-                        >
+                        <div class="grade-note">enter scores</div>
                     {/if}
                 </div>
             </div>
-            <div class="hero-grade">
-                <div class="letter-grade mono" style="color: {gradeColor}">
-                    {getLetterGrade(proj.grade)}
-                </div>
-                {#if proj.grade !== null}
-                    <div class="pct-grade mono" style="color: {gradeColor}">
-                        {proj.grade.toFixed(2)}%
-                    </div>
-                    <div class="grade-note">projected</div>
+            <div class="meta mono">
+                {proj.filled}/{proj.total} graded
+                {#if filledWeight > 0}
+                    · <span class="earned-line">earned {earnedWeight.toFixed(1)}/{filledWeight.toFixed(0)}%</span>
                 {:else}
-                    <div class="grade-note">enter scores to see projection</div>
+                    · <span style="color: oklch(0.4 0.02 265)"
+                        >no scores yet</span
+                    >
+                {/if}
+                {#if totalWeight !== 100}
+                    · <span style="color: #fb923c"
+                        >⚠ {totalWeight}%</span
+                    >
+                {:else}
+                    · <span style="color: oklch(0.4 0.02 265)"
+                        >weights OK</span
+                    >
                 {/if}
             </div>
         </div>
@@ -274,8 +276,20 @@
                             {/if}
                         </div>
 
+                        <!-- Remove (mobile: top-right) -->
+                        <button
+                            class="remove-btn"
+                            onclick={() =>
+                                grades.removeComponent(data.courseId, comp.id)}
+                            title="remove">×</button
+                        >
+                    </div>
+
+                    <!-- Values row (weight, score, pct, contrib) -->
+                    <div class="comp-values-row">
                         <!-- Weight -->
                         <div class="comp-cell weight-cell">
+                            <span class="cell-label mono">wt</span>
                             <input
                                 class="num-input mono"
                                 type="number"
@@ -295,6 +309,7 @@
                         <!-- Score -->
                         <div class="comp-cell score-cell">
                             {#if !hasSubItems}
+                                <span class="cell-label mono">score</span>
                                 <input
                                     class="num-input mono score-input"
                                     type="number"
@@ -370,14 +385,6 @@
                         >
                             {contrib !== null ? contrib.toFixed(2) + "%" : "—"}
                         </div>
-
-                        <!-- Remove -->
-                        <button
-                            class="remove-btn"
-                            onclick={() =>
-                                grades.removeComponent(data.courseId, comp.id)}
-                            title="remove">×</button
-                        >
                     </div>
 
                     <!-- Sub-items panel -->
@@ -386,7 +393,7 @@
                             <div class="best-of-row mono">
                                 <span class="dimmed">scoring:</span>
                                 {#if comp.bestOf !== undefined}
-                                    best
+                                    <span class="best-of-inline">best
                                     <input
                                         class="bestof-input mono"
                                         type="number"
@@ -401,7 +408,7 @@
                                                 comp.subItems!.length,
                                             )}
                                     />
-                                    of {comp.subItems!.length}
+                                    of {comp.subItems!.length}</span>
                                     <button
                                         class="pill-btn mono"
                                         onclick={() =>
@@ -409,10 +416,10 @@
                                                 data.courseId,
                                                 comp.id,
                                                 undefined,
-                                            )}>→ use all</button
+                                            )}>→ all</button
                                     >
                                 {:else}
-                                    average of all {comp.subItems!.length}
+                                    <span class="best-of-inline">avg of all {comp.subItems!.length}</span>
                                     <button
                                         class="pill-btn mono"
                                         onclick={() =>
@@ -423,11 +430,11 @@
                                                     1,
                                                     comp.subItems!.length - 1,
                                                 ),
-                                            )}>→ set best-of</button
+                                            )}>→ best-of</button
                                     >
                                 {/if}
-                                <span class="dimmed" style="margin-left: auto;"
-                                    >each worth {comp.subItems!.length > 0
+                                <span class="dimmed best-of-worth"
+                                    >each {comp.subItems!.length > 0
                                         ? (
                                               comp.weight /
                                               comp.subItems!.length
@@ -443,103 +450,107 @@
                                         : null}
                                 {@const subColor = getGradeColor(subPct)}
                                 <div class="sub-row">
-                                    <div class="sub-name-cell">
-                                        {#if editingSubName === sub.id}
+                                    <div class="sub-top-row">
+                                        <div class="sub-name-cell">
+                                            {#if editingSubName === sub.id}
+                                                <input
+                                                    class="name-input mono"
+                                                    value={sub.name}
+                                                    use:focusOnMount
+                                                    onblur={(e) => {
+                                                        grades.updateSubName(
+                                                            data.courseId,
+                                                            comp.id,
+                                                            sub.id,
+                                                            (
+                                                                e.target as HTMLInputElement
+                                                            ).value,
+                                                        );
+                                                        editingSubName = null;
+                                                    }}
+                                                    onkeydown={(e) => {
+                                                        if (e.key === "Enter")
+                                                            (
+                                                                e.target as HTMLInputElement
+                                                            ).blur();
+                                                    }}
+                                                />
+                                            {:else}
+                                                <button
+                                                    class="name-display mono small"
+                                                    onclick={() =>
+                                                        (editingSubName = sub.id)}
+                                                >
+                                                    {sub.name}<span
+                                                        class="edit-hint">✏</span
+                                                    >
+                                                </button>
+                                            {/if}
+                                        </div>
+
+                                        <button
+                                            class="remove-btn small"
+                                            onclick={() =>
+                                                grades.removeSubItem(
+                                                    data.courseId,
+                                                    comp.id,
+                                                    sub.id,
+                                                )}
+                                            title="remove">×</button
+                                        >
+                                    </div>
+
+                                    <div class="sub-bottom-row">
+                                        <div class="sub-score-cell">
                                             <input
-                                                class="name-input mono"
-                                                value={sub.name}
-                                                use:focusOnMount
-                                                onblur={(e) => {
-                                                    grades.updateSubName(
-                                                        data.courseId,
+                                                class="num-input mono score-input"
+                                                type="number"
+                                                min="0"
+                                                max={sub.maxScore}
+                                                step="0.5"
+                                                placeholder="—"
+                                                value={sub.score ?? ""}
+                                                oninput={(e) =>
+                                                    handleSubScore(
                                                         comp.id,
                                                         sub.id,
                                                         (
                                                             e.target as HTMLInputElement
                                                         ).value,
-                                                    );
-                                                    editingSubName = null;
-                                                }}
-                                                onkeydown={(e) => {
-                                                    if (e.key === "Enter")
+                                                    )}
+                                            />
+                                            <span class="unit mono">/ </span>
+                                            <input
+                                                class="num-input mono max-input"
+                                                type="number"
+                                                min="1"
+                                                step="1"
+                                                value={sub.maxScore}
+                                                oninput={(e) =>
+                                                    handleSubMax(
+                                                        comp.id,
+                                                        sub.id,
                                                         (
                                                             e.target as HTMLInputElement
-                                                        ).blur();
-                                                }}
+                                                        ).value,
+                                                    )}
                                             />
-                                        {:else}
-                                            <button
-                                                class="name-display mono small"
-                                                onclick={() =>
-                                                    (editingSubName = sub.id)}
-                                            >
-                                                {sub.name}<span
-                                                    class="edit-hint">✏</span
+                                        </div>
+
+                                        <div class="sub-pct-cell">
+                                            {#if subPct !== null}
+                                                <span
+                                                    class="mono text-xs"
+                                                    style="color: {subColor}"
+                                                    >{subPct.toFixed(1)}%</span
                                                 >
-                                            </button>
-                                        {/if}
+                                            {:else}
+                                                <span class="dimmed mono text-xs"
+                                                    >—</span
+                                                >
+                                            {/if}
+                                        </div>
                                     </div>
-
-                                    <div class="sub-score-cell">
-                                        <input
-                                            class="num-input mono score-input"
-                                            type="number"
-                                            min="0"
-                                            max={sub.maxScore}
-                                            step="0.5"
-                                            placeholder="—"
-                                            value={sub.score ?? ""}
-                                            oninput={(e) =>
-                                                handleSubScore(
-                                                    comp.id,
-                                                    sub.id,
-                                                    (
-                                                        e.target as HTMLInputElement
-                                                    ).value,
-                                                )}
-                                        />
-                                        <span class="unit mono">/ </span>
-                                        <input
-                                            class="num-input mono max-input"
-                                            type="number"
-                                            min="1"
-                                            step="1"
-                                            value={sub.maxScore}
-                                            oninput={(e) =>
-                                                handleSubMax(
-                                                    comp.id,
-                                                    sub.id,
-                                                    (
-                                                        e.target as HTMLInputElement
-                                                    ).value,
-                                                )}
-                                        />
-                                    </div>
-
-                                    <div class="sub-pct-cell">
-                                        {#if subPct !== null}
-                                            <span
-                                                class="mono text-xs"
-                                                style="color: {subColor}"
-                                                >{subPct.toFixed(1)}%</span
-                                            >
-                                        {:else}
-                                            <span class="dimmed mono text-xs"
-                                                >—</span
-                                            >
-                                        {/if}
-                                    </div>
-
-                                    <button
-                                        class="remove-btn small"
-                                        onclick={() =>
-                                            grades.removeSubItem(
-                                                data.courseId,
-                                                comp.id,
-                                                sub.id,
-                                            )}
-                                        title="remove">×</button
-                                    >
                                 </div>
                             {/each}
 
@@ -614,11 +625,13 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 0.5rem;
     }
     .nav-left {
         display: flex;
         align-items: center;
         gap: 1rem;
+        min-width: 0;
     }
 
     .back-btn {
@@ -629,6 +642,7 @@
         border-radius: 5px;
         padding: 0.3rem 0.7rem;
         cursor: pointer;
+        flex-shrink: 0;
         transition:
             color 0.15s,
             border-color 0.15s;
@@ -641,11 +655,16 @@
         font-size: 0.75rem;
         display: flex;
         gap: 0.4rem;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     .header-actions {
         display: flex;
         align-items: center;
         gap: 0.5rem;
+        flex-shrink: 0;
     }
 
     .action-btn {
@@ -655,6 +674,7 @@
         padding: 0.3rem 0.7rem;
         color: oklch(0.7 0.02 265);
         cursor: pointer;
+        white-space: nowrap;
         transition: all 0.15s;
     }
     .action-btn:hover {
@@ -684,8 +704,8 @@
     /* Hero */
     .hero {
         display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.5rem;
         margin-bottom: 2rem;
         padding: 1.5rem;
         background: oklch(0.12 0.025 265);
@@ -709,6 +729,16 @@
         );
         opacity: 0.5;
     }
+    .hero-top-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    .hero-left {
+        min-width: 0;
+        flex: 1;
+    }
     .course-chip {
         font-size: 0.65rem;
         font-weight: 700;
@@ -724,11 +754,12 @@
         font-size: 1.4rem;
         font-weight: 600;
         letter-spacing: -0.02em;
-        margin: 0 0 0.4rem;
+        margin: 0;
     }
     .meta {
         font-size: 0.7rem;
         color: oklch(0.5 0.02 265);
+        line-height: 1.6;
     }
     .earned-line {
         font-size: 0.95rem;
@@ -738,6 +769,7 @@
     }
     .hero-grade {
         text-align: right;
+        flex-shrink: 0;
     }
     .letter-grade {
         font-size: 3.5rem;
@@ -781,13 +813,31 @@
         border-color: oklch(1 0 0 / 14%);
     }
 
+    /* Top row: expand + name + remove */
     .comp-row {
-        display: grid;
-        grid-template-columns: 28px 1fr 100px 180px 140px 70px 32px;
+        display: flex;
         align-items: center;
         gap: 0.5rem;
         padding: 0.65rem 0.75rem;
-        min-height: 52px;
+        padding-bottom: 0;
+        min-height: 36px;
+    }
+
+    /* Values row: weight, score, pct, contrib */
+    .comp-values-row {
+        display: grid;
+        grid-template-columns: auto 1fr auto auto;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.75rem 0.65rem;
+    }
+
+    .cell-label {
+        display: none;
+        font-size: 0.6rem;
+        color: oklch(0.4 0.02 265);
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
     }
 
     /* Expand button */
@@ -799,6 +849,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
+        flex-shrink: 0;
+        width: 28px;
     }
     .expand-btn.has-sub {
         cursor: pointer;
@@ -830,6 +882,8 @@
     /* Name */
     .comp-name-cell {
         overflow: hidden;
+        flex: 1;
+        min-width: 0;
     }
     .name-display {
         background: none;
@@ -958,6 +1012,7 @@
         align-items: flex-end;
         gap: 0.2rem;
         width: 100%;
+        min-width: 60px;
     }
     .bar-track {
         width: 100%;
@@ -984,6 +1039,7 @@
         padding: 0.1rem 0.35rem;
         border-radius: 4px;
         line-height: 1;
+        flex-shrink: 0;
         transition:
             color 0.15s,
             background 0.15s;
@@ -1009,11 +1065,20 @@
         display: flex;
         align-items: center;
         gap: 0.4rem;
+        flex-wrap: wrap;
         font-size: 0.7rem;
         color: oklch(0.65 0.02 265);
         padding: 0.4rem 0;
         border-bottom: 1px solid oklch(1 0 0 / 6%);
         margin-bottom: 0.25rem;
+    }
+    .best-of-inline {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+    .best-of-worth {
+        margin-left: auto;
     }
     .bestof-input {
         width: 40px;
@@ -1048,20 +1113,33 @@
         background: oklch(1 0 0 / 12%);
         color: oklch(0.85 0.01 265);
     }
+
+    /* Sub-row: now uses flex layout for mobile-friendliness */
     .sub-row {
-        display: grid;
-        grid-template-columns: 1fr 200px 70px 28px;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.3rem 0.25rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        padding: 0.4rem 0.25rem;
         border-radius: 5px;
         transition: background 0.1s;
     }
     .sub-row:hover {
         background: oklch(1 0 0 / 3%);
     }
+    .sub-top-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .sub-bottom-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
     .sub-name-cell {
         overflow: hidden;
+        flex: 1;
+        min-width: 0;
     }
     .sub-score-cell {
         display: flex;
@@ -1071,6 +1149,7 @@
     }
     .sub-pct-cell {
         text-align: right;
+        flex-shrink: 0;
     }
     .add-sub-btn {
         margin-top: 0.35rem;
@@ -1100,7 +1179,8 @@
         font-size: 0.72rem;
         color: oklch(0.5 0.02 265);
         display: flex;
-        gap: 2rem;
+        flex-wrap: wrap;
+        gap: 1rem 2rem;
     }
     .add-full-btn {
         width: 100%;
@@ -1118,5 +1198,235 @@
         background: #4ade8010;
         border-color: #4ade8030;
         color: #4ade80;
+    }
+
+    /* ── Desktop: restore the original inline grid layout ─── */
+    @media (min-width: 769px) {
+        .comp-row {
+            display: grid;
+            grid-template-columns: 28px 1fr 32px;
+            padding-bottom: 0;
+        }
+
+        .comp-values-row {
+            grid-template-columns: 100px 180px 140px 70px;
+            padding-left: calc(0.75rem + 28px + 0.5rem);
+        }
+
+        .sub-row {
+            flex-direction: row;
+            align-items: center;
+        }
+        .sub-top-row {
+            flex: 1;
+            min-width: 0;
+        }
+        .sub-bottom-row {
+            flex-shrink: 0;
+        }
+    }
+
+    /* ── Mobile-specific styles ─────────────── */
+    @media (max-width: 768px) {
+        .header {
+            padding: 0.75rem 0.75rem;
+        }
+
+        .header-inner {
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .nav-left {
+            width: 100%;
+            gap: 0.5rem;
+        }
+
+        .breadcrumb {
+            font-size: 0.68rem;
+        }
+
+        .header-actions {
+            width: 100%;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+        }
+
+        .action-btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.65rem;
+        }
+
+        .main {
+            padding: 1rem 0.75rem;
+        }
+
+        /* Hero mobile */
+        .hero {
+            padding: 1rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .hero-top-row {
+            gap: 0.5rem;
+        }
+
+        .course-fullname {
+            font-size: 1.1rem;
+        }
+
+        .letter-grade {
+            font-size: 2.5rem;
+        }
+
+        .pct-grade {
+            font-size: 0.9rem;
+        }
+
+        .meta {
+            font-size: 0.65rem;
+        }
+
+        /* Component cards mobile — stack vertically */
+        .comp-row {
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 0.35rem;
+            padding: 0.5rem 0.6rem;
+            padding-bottom: 0.15rem;
+        }
+
+        .comp-values-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 0.25rem 0.6rem 0.5rem;
+        }
+
+        .cell-label {
+            display: inline;
+        }
+
+        .weight-cell {
+            justify-content: flex-start;
+        }
+
+        .score-cell {
+            justify-content: flex-start;
+        }
+
+        .pct-cell {
+            flex: 1;
+            min-width: 60px;
+        }
+
+        .contrib-cell {
+            justify-content: flex-start;
+        }
+
+        .bar-stack {
+            min-width: 50px;
+        }
+
+        .num-input {
+            width: 48px;
+            font-size: 0.72rem;
+            padding: 0.25rem 0.3rem;
+        }
+
+        .max-input {
+            width: 40px;
+        }
+
+        .name-display {
+            font-size: 0.75rem;
+        }
+
+        .sub-count {
+            font-size: 0.55rem;
+        }
+
+        /* Sub-panel mobile */
+        .sub-panel {
+            padding: 0.5rem 0.5rem 0.75rem 1rem;
+        }
+
+        .best-of-row {
+            font-size: 0.65rem;
+            gap: 0.3rem;
+        }
+
+        .best-of-worth {
+            margin-left: 0;
+            width: 100%;
+        }
+
+        .sub-row {
+            flex-direction: column;
+            gap: 0.2rem;
+            padding: 0.3rem 0.2rem;
+        }
+
+        .sub-top-row {
+            width: 100%;
+        }
+
+        .sub-bottom-row {
+            width: 100%;
+            padding-left: 0;
+        }
+
+        .sub-score-cell {
+            flex: 1;
+        }
+
+        .name-display.small {
+            font-size: 0.68rem;
+        }
+
+        /* Totals mobile */
+        .totals {
+            gap: 0.5rem 1rem;
+        }
+    }
+
+    /* Extra-small screens */
+    @media (max-width: 400px) {
+        .header {
+            padding: 0.6rem 0.5rem;
+        }
+
+        .main {
+            padding: 0.75rem 0.5rem;
+        }
+
+        .hero {
+            padding: 0.75rem;
+        }
+
+        .course-fullname {
+            font-size: 1rem;
+        }
+
+        .letter-grade {
+            font-size: 2rem;
+        }
+
+        .comp-row {
+            padding: 0.4rem 0.5rem;
+        }
+
+        .comp-values-row {
+            padding: 0.25rem 0.5rem 0.5rem;
+        }
+
+        .num-input {
+            width: 44px;
+            font-size: 0.68rem;
+        }
+
+        .max-input {
+            width: 36px;
+        }
     }
 </style>

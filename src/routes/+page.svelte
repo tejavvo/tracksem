@@ -103,7 +103,7 @@
                         style="border-color: {gradeColor(overall.grade)}40; color: {gradeColor(overall.grade)}"
                     >
                         <span class="mono text-sm">avg {overall.grade.toFixed(1)}%</span>
-                        <span class="mono text-xs" style="opacity: 0.6">
+                        <span class="mono text-xs hide-mobile" style="opacity: 0.6">
                             across {overall.count} course{overall.count > 1 ? "s" : ""}
                         </span>
                     </div>
@@ -217,6 +217,10 @@
         gap: 1rem;
     }
 
+    .hide-mobile {
+        display: inline;
+    }
+
     .brand {
         display: flex;
         align-items: center;
@@ -315,7 +319,7 @@
 
     .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
         gap: 1rem;
     }
 
@@ -491,5 +495,67 @@
         font-size: 0.7rem;
         color: oklch(0.35 0.02 265);
         margin-top: 2rem;
+    }
+
+    /* ── Mobile responsive ───────────────────── */
+
+    @media (max-width: 640px) {
+        .header {
+            padding: 0.875rem 1rem;
+        }
+
+        .header-inner {
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .header-right {
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .overall-pill {
+            padding: 0.3rem 0.6rem;
+            gap: 0.35rem;
+        }
+
+        .hide-mobile {
+            display: none;
+        }
+
+        .user-group {
+            padding-left: 0;
+            border-left: none;
+        }
+
+        .user-email {
+            max-width: 120px;
+            font-size: 0.62rem;
+        }
+
+        .main {
+            padding: 1rem;
+        }
+
+        .grid {
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+        }
+
+        .add-card {
+            min-height: 80px;
+        }
+
+        .add-card-closed {
+            min-height: 60px;
+        }
+
+        .modal {
+            padding: 1rem;
+        }
+
+        .modal-card {
+            width: 100%;
+        }
     }
 </style>

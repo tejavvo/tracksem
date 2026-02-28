@@ -220,6 +220,41 @@
         gap: 1.25rem;
     }
 
+    @media (max-width: 480px) {
+        .page {
+            padding: 1rem 0.75rem;
+        }
+
+        .card {
+            padding: 1.25rem;
+            gap: 1rem;
+            border-radius: 10px;
+        }
+
+        .brand-icon {
+            font-size: 1.25rem;
+        }
+
+        .brand-title {
+            font-size: 1rem;
+        }
+
+        .oauth-btn {
+            padding: 0.6rem 0.75rem;
+            font-size: 0.75rem;
+        }
+
+        .input {
+            padding: 0.6rem 0.7rem;
+            font-size: 0.82rem;
+        }
+
+        .submit {
+            padding: 0.65rem 0.75rem;
+            font-size: 0.8rem;
+        }
+    }
+
     /* ── Brand ───────────────────────────────── */
 
     .brand {
