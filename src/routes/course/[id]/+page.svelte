@@ -2,11 +2,12 @@
     import type { PageProps } from "./$types";
     import { grades, computeCompPct } from "$lib/stores/grades.svelte";
     import { getGradeColor, getLetterGrade } from "$lib/grading";
+    import { tick } from "svelte";
     import { goto } from "$app/navigation";
 
     let { data }: PageProps = $props();
 
-    const course = $derived(grades.getCourse(data.courseId)!);
+    const course = $derived(grades.getCourse(data.courseId));
     const proj = $derived(grades.projectedGrade(data.courseId));
     const totalWeight = $derived(grades.totalWeight(data.courseId));
 
@@ -61,8 +62,26 @@
         else if (num > 0 && num <= total)
             grades.updateBestOf(data.courseId, compId, num);
     }
+
+    let deletingCourse = $state(false);
+
+    async function handleDeleteCourse() {
+        if (deletingCourse) return;
+        const name = course?.name ?? "this course";
+        const ok = confirm(`Delete ${name}?`);
+        if (!ok) return;
+        deletingCourse = true;
+        await grades.deleteCourse(data.courseId);
+        goto("/");
+    }
+
+    function focusOnMount(node: HTMLElement) {
+        tick().then(() => node.focus());
+        return {};
+    }
 </script>
 
+{#if course}
 <div class="page">
     <header class="header">
         <div class="header-inner">
@@ -97,6 +116,12 @@
                         onclick={() => (confirmReset = true)}>reset</button
                     >
                 {/if}
+                <button
+                    class="action-btn danger mono text-xs"
+                    disabled={deletingCourse}
+                    onclick={handleDeleteCourse}
+                    >{deletingCourse ? "deleting..." : "delete course"}</button
+                >
                 <button
                     class="action-btn add mono text-xs"
                     onclick={() => grades.addComponent(data.courseId)}
@@ -189,6 +214,7 @@
                                 <input
                                     class="name-input mono"
                                     value={comp.name}
+                                    use:focusOnMount
                                     onblur={(e) => {
                                         grades.updateName(
                                             data.courseId,
@@ -204,7 +230,6 @@
                                                 e.target as HTMLInputElement
                                             ).blur();
                                     }}
-                                    autofocus
                                 />
                             {:else}
                                 <button
@@ -399,6 +424,7 @@
                                             <input
                                                 class="name-input mono"
                                                 value={sub.name}
+                                                use:focusOnMount
                                                 onblur={(e) => {
                                                     grades.updateSubName(
                                                         data.courseId,
@@ -416,7 +442,6 @@
                                                             e.target as HTMLInputElement
                                                         ).blur();
                                                 }}
-                                                autofocus
                                             />
                                         {:else}
                                             <button
@@ -533,6 +558,14 @@
         >
     </main>
 </div>
+{:else}
+<div class="page">
+    <main class="main">
+        <div class="section-label mono">course not found</div>
+        <button class="back-btn mono" onclick={() => goto("/")}>← back</button>
+    </main>
+</div>
+{/if}
 
 <style>
     .page {

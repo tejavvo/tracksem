@@ -67,6 +67,18 @@ class GradesStore {
         this.courses = await res.json();
     }
 
+    /** Add a new course with default components */
+    async addCourse(name: string, fullName: string, color: string): Promise<void> {
+        const created = (await api('/api/courses', 'POST', { name, fullName, color })) as Course;
+        this.courses = [...this.courses, created];
+    }
+
+    /** Delete a course */
+    async deleteCourse(courseId: string): Promise<void> {
+        await api('/api/courses', 'DELETE', { id: courseId });
+        this.courses = this.courses.filter((c) => c.id !== courseId);
+    }
+
     getCourse(id: string): Course | undefined {
         return this.courses.find((c) => c.id === id);
     }
