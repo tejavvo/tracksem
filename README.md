@@ -21,8 +21,6 @@ bun run dev
 
 → `http://localhost:5173`
 
-The SQLite database (`data/tracksem.db`) is auto-created and seeded on first run.
-
 ## features
 
 - **Dashboard** — all courses at a glance with letter grade, projected %, and per-component bars
