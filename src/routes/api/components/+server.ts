@@ -3,22 +3,31 @@ import { addComponent, updateComponentField, deleteComponent } from '$lib/server
 import type { RequestHandler } from './$types';
 
 /** POST /api/components → add a new component */
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, locals }) => {
+    const { data: { user } } = await locals.supabase.auth.getUser();
+    if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
+
     const { courseId, id, name } = await request.json();
-    addComponent(courseId, id, name);
+    await addComponent(locals.supabase, courseId, id, name);
     return json({ ok: true });
 };
 
 /** PATCH /api/components → update a component field */
-export const PATCH: RequestHandler = async ({ request }) => {
+export const PATCH: RequestHandler = async ({ request, locals }) => {
+    const { data: { user } } = await locals.supabase.auth.getUser();
+    if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
+
     const { id, field, value } = await request.json();
-    updateComponentField(id, field, value);
+    await updateComponentField(locals.supabase, id, field, value);
     return json({ ok: true });
 };
 
 /** DELETE /api/components → remove a component */
-export const DELETE: RequestHandler = async ({ request }) => {
+export const DELETE: RequestHandler = async ({ request, locals }) => {
+    const { data: { user } } = await locals.supabase.auth.getUser();
+    if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
+
     const { id } = await request.json();
-    deleteComponent(id);
+    await deleteComponent(locals.supabase, id);
     return json({ ok: true });
 };

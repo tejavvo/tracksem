@@ -3,24 +3,32 @@ import { addSubItem, updateSubItemField, deleteSubItem, getSubItemCount } from '
 import type { RequestHandler } from './$types';
 
 /** POST /api/sub-items → add a new sub-item */
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, locals }) => {
+    const { data: { user } } = await locals.supabase.auth.getUser();
+    if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
+
     const { componentId, id, name, maxScore } = await request.json();
-    addSubItem(componentId, id, name, maxScore);
+    await addSubItem(locals.supabase, componentId, id, name, maxScore);
     return json({ ok: true });
 };
 
 /** PATCH /api/sub-items → update a sub-item field */
-export const PATCH: RequestHandler = async ({ request }) => {
+export const PATCH: RequestHandler = async ({ request, locals }) => {
+    const { data: { user } } = await locals.supabase.auth.getUser();
+    if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
+
     const { id, field, value } = await request.json();
-    updateSubItemField(id, field, value);
+    await updateSubItemField(locals.supabase, id, field, value);
     return json({ ok: true });
 };
 
 /** DELETE /api/sub-items → remove a sub-item */
-export const DELETE: RequestHandler = async ({ request }) => {
+export const DELETE: RequestHandler = async ({ request, locals }) => {
+    const { data: { user } } = await locals.supabase.auth.getUser();
+    if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
+
     const { id, componentId } = await request.json();
-    deleteSubItem(id);
-    // Return remaining count so client can adjust bestOf
-    const remaining = getSubItemCount(componentId);
+    await deleteSubItem(locals.supabase, id);
+    const remaining = await getSubItemCount(locals.supabase, componentId);
     return json({ ok: true, remaining });
 };

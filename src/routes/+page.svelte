@@ -1,6 +1,18 @@
 <script lang="ts">
     import { grades } from "$lib/stores/grades.svelte";
     import CourseCard from "$lib/components/CourseCard.svelte";
+    import { page } from "$app/state";
+    import { createBrowserClient } from "@supabase/ssr";
+    import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from "$env/static/public";
+    import { goto } from "$app/navigation";
+
+    const supabase = createBrowserClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY);
+
+    async function logout() {
+        await supabase.auth.signOut();
+        grades.reset();
+        goto("/auth");
+    }
 
     function getOverallGrade(): { grade: number | null; count: number } {
         let total = 0;
@@ -42,23 +54,24 @@
                 </div>
             </div>
 
-            {#if overall.grade !== null}
-                <div
-                    class="overall-pill"
-                    style="border-color: {gradeColor(
-                        overall.grade,
-                    )}40; color: {gradeColor(overall.grade)}"
-                >
-                    <span class="mono text-sm"
-                        >avg {overall.grade.toFixed(1)}%</span
+            <div class="header-right">
+                {#if overall.grade !== null}
+                    <div
+                        class="overall-pill"
+                        style="border-color: {gradeColor(overall.grade)}40; color: {gradeColor(overall.grade)}"
                     >
-                    <span class="mono text-xs" style="opacity: 0.6"
-                        >across {overall.count} course{overall.count > 1
-                            ? "s"
-                            : ""}</span
-                    >
+                        <span class="mono text-sm">avg {overall.grade.toFixed(1)}%</span>
+                        <span class="mono text-xs" style="opacity: 0.6">
+                            across {overall.count} course{overall.count > 1 ? "s" : ""}
+                        </span>
+                    </div>
+                {/if}
+
+                <div class="user-group">
+                    <span class="user-email mono">{page.data.user?.email}</span>
+                    <button class="logout-btn mono" onclick={logout}>sign_out</button>
                 </div>
-            {/if}
+            </div>
         </div>
     </header>
 
@@ -100,12 +113,14 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 1rem;
     }
 
     .brand {
         display: flex;
         align-items: center;
         gap: 0.75rem;
+        flex-shrink: 0;
     }
 
     .brand-icon {
@@ -127,6 +142,13 @@
         margin-top: 1px;
     }
 
+    .header-right {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        min-width: 0;
+    }
+
     .overall-pill {
         display: flex;
         align-items: center;
@@ -135,6 +157,44 @@
         border-radius: 20px;
         padding: 0.4rem 0.85rem;
         background: oklch(1 0 0 / 4%);
+        flex-shrink: 0;
+    }
+
+    .user-group {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 0;
+        padding-left: 0.75rem;
+        border-left: 1px solid oklch(1 0 0 / 8%);
+    }
+
+    .user-email {
+        font-size: 0.68rem;
+        color: oklch(0.38 0.02 265);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 180px;
+    }
+
+    .logout-btn {
+        font-size: 0.68rem;
+        background: none;
+        border: 1px solid oklch(1 0 0 / 8%);
+        border-radius: 4px;
+        color: oklch(0.4 0.02 265);
+        padding: 0.22rem 0.55rem;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .logout-btn:hover {
+        color: #f87171;
+        border-color: #f8717133;
+        background: #f8717110;
     }
 
     .main {

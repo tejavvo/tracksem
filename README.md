@@ -60,3 +60,9 @@ The SQLite database (`data/tracksem.db`) is auto-created and seeded on first run
 | C- | 65–69% |
 | D  | 60–64% |
 | F  | < 60% |
+
+
+## Future Plans
+- [ ] Exprot and Import
+- [ ] Semester Support
+- [ ] Multi-user Support

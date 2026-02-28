@@ -1,7 +1,7 @@
 import type { Course, Component, SubItem } from '$lib/types';
 
 function generateId(): string {
-    return Math.random().toString(36).slice(2, 10);
+    return crypto.randomUUID();
 }
 
 /**
@@ -46,6 +46,12 @@ async function api(path: string, method: string, body?: unknown): Promise<unknow
 class GradesStore {
     courses = $state<Course[]>([]);
     loaded = $state(false);
+
+    /** Clear all state — call on sign-out so the next user starts fresh */
+    reset(): void {
+        this.courses = [];
+        this.loaded = false;
+    }
 
     /** Load all courses from the API */
     async load(): Promise<void> {
