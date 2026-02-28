@@ -231,6 +231,75 @@
         gap: 0.5rem;
     }
 
+    /* ── Mobile responsive ───────────────────── */
+
+    @media (max-width: 640px) {
+        .card-inner {
+            padding: 1rem;
+            gap: 0.65rem;
+        }
+
+        .course-tag {
+            font-size: 0.65rem;
+            padding: 0.1rem 0.4rem;
+        }
+
+        .grade-badge {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+        }
+
+        .letter {
+            font-size: 0.85rem;
+        }
+
+        .full-name {
+            font-size: 0.7rem;
+        }
+
+        .grade-num {
+            font-size: 1.5rem;
+        }
+
+        .grade-suffix {
+            font-size: 0.78rem;
+        }
+
+        .bar-row {
+            grid-template-columns: 1fr 60px 28px;
+            gap: 0.35rem;
+        }
+
+        .bar-label {
+            font-size: 0.6rem;
+        }
+
+        .bar-weight {
+            font-size: 0.55rem;
+        }
+
+        .card-footer {
+            padding-top: 0.4rem;
+        }
+    }
+
+    @media (max-width: 380px) {
+        .card-inner {
+            padding: 0.85rem;
+            gap: 0.5rem;
+        }
+
+        .bar-row {
+            grid-template-columns: 1fr 50px 24px;
+            gap: 0.25rem;
+        }
+
+        .grade-num {
+            font-size: 1.3rem;
+        }
+    }
+
     .bar-label {
         font-size: 0.65rem;
         color: oklch(0.55 0.02 265);

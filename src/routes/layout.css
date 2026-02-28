@@ -67,10 +67,15 @@
   html {
     color-scheme: dark;
   }
+  html, body {
+    overflow-x: hidden;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: 'Inter', system-ui, sans-serif;
     min-height: 100vh;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
     background-image:
       radial-gradient(ellipse at 20% 50%, oklch(0.2 0.05 280 / 15%) 0%, transparent 60%),
       radial-gradient(ellipse at 80% 20%, oklch(0.2 0.05 200 / 10%) 0%, transparent 60%);
@@ -93,6 +98,18 @@
   }
 
   .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* Prevent iOS zoom on input focus (requires >= 16px font-size) */
+  @media (pointer: coarse) {
+    input[type="email"],
+    input[type="password"],
+    input[type="text"],
+    input[type="search"],
+    select,
+    textarea {
+      font-size: max(16px, 1em);
+    }
+  }
 
   /* Scrollbar */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
