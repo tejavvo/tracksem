@@ -42,7 +42,7 @@ export const DEFAULT_COURSES: Course[] = [
 			{ id: 'cso-midsem', name: 'Midsem', weight: 15, maxScore: 100, score: null },
 			{ id: 'cso-endsem', name: 'Endsem', weight: 25, maxScore: 100, score: null },
 			{
-				id: 'cso-endlab', name: 'Endlab + Inclass Test', weight: 15, maxScore: 100, score: null,
+				id: 'cso-endlab', name: 'Endlab + Inclass Test', weight: 20, maxScore: 100, score: null,
 				subItems: [
 					{ id: 'cso-endlab-1', name: 'Endlab', score: null, maxScore: 100 },
 					{ id: 'cso-endlab-2', name: 'Inclass Test', score: null, maxScore: 100 }
