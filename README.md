@@ -8,7 +8,7 @@ A TUI-style grade tracker for sem 2 courses — ISS, CSO, IoT, LA, DSA. Enter sc
 
 - [SvelteKit](https://kit.svelte.dev) + Svelte 5 runes
 - [shadcn-svelte](https://shadcn-svelte.com) + Tailwind CSS v4
-- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) for persistence
+- [Supabase](https://supabase.com) for persistence
 - [Bun](https://bun.sh)
 
 ## dev
@@ -46,8 +46,6 @@ The SQLite database (`data/tracksem.db`) is auto-created and seeded on first run
 | LA     | 100% |
 | DSA    | 92% ⚠ |
 
-> DSA components as listed sum to 92%. Adjust weights or add a component to fix it.
-
 ## grade scale
 
 | Letter | Range |
@@ -60,7 +58,6 @@ The SQLite database (`data/tracksem.db`) is auto-created and seeded on first run
 | C- | 65–69% |
 | D  | 60–64% |
 | F  | < 60% |
-
 
 ## Future Plans
 - [ ] Exprot and Import
