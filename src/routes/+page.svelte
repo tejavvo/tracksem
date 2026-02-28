@@ -10,7 +10,6 @@
 
     async function logout() {
         await supabase.auth.signOut();
-        grades.reset();
         goto("/auth");
     }
 

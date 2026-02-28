@@ -6,6 +6,7 @@
 	import { invalidateAll, goto } from "$app/navigation";
 	import { onMount } from "svelte";
 	import { browser } from "$app/environment";
+	import { page } from "$app/state";
 
 	let { children, data } = $props();
 
@@ -16,23 +17,34 @@
 	onMount(() => {
 		if (!supabase) return;
 
-		// Load grades now that we know we're authenticated
-		grades.load();
-
 		// Listen for auth state changes (sign-out in another tab, token refresh, etc.)
 		// We intentionally ignore the session parameter — use getUser() server-side instead.
 		const {
 			data: { subscription }
 		} = supabase.auth.onAuthStateChange((event) => {
 			if (event === "SIGNED_OUT") {
-				grades.reset();
-				goto("/auth");
+				invalidateAll();
 			} else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
 				invalidateAll();
 			}
 		});
 
 		return () => subscription.unsubscribe();
+	});
+	$effect(() => {
+		if (!browser) return;
+
+		if (data.user === null) {
+			grades.reset();
+			if (page.url.pathname !== "/auth") {
+				goto("/auth");
+			}
+			return;
+		}
+
+		if (!grades.loaded) {
+			grades.load();
+		}
 	});
 </script>
 
