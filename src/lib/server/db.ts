@@ -11,20 +11,35 @@ export async function seedByBranch(
 ): Promise<Course[]> {
   const results: Course[] = [];
   for (const selectedCourse of selectedCourses) {
-    if (selectedCourse.components.length === 0) {
+    // Check if DEFAULT_COURSES has a matching entry by id — it will have
+    // the real component breakdown (weights, sub-items, best-of, etc.)
+    const defaultMatch = DEFAULT_COURSES.find((d) => d.id === selectedCourse.id);
+
+    if (defaultMatch && defaultMatch.components.length > 0) {
+      // Merge: use the catalog name/fullName/color but the default components
+      const merged: Course = {
+        ...defaultMatch,
+        name: selectedCourse.name,
+        fullName: selectedCourse.fullName,
+        color: selectedCourse.color,
+      };
+      const course = await addCourseWithComponents(supabase, userId, merged);
+      results.push(course);
+    } else if (selectedCourse.components.length > 0) {
+      const course = await addCourseWithComponents(
+        supabase,
+        userId,
+        selectedCourse,
+      );
+      results.push(course);
+    } else {
+      // No detailed components known — fall back to generic Quiz/Midsem/Endsem
       const course = await addCourseWithDefaults(
         supabase,
         userId,
         selectedCourse.name,
         selectedCourse.fullName,
         selectedCourse.color,
-      );
-      results.push(course);
-    } else {
-      const course = await addCourseWithComponents(
-        supabase,
-        userId,
-        selectedCourse,
       );
       results.push(course);
     }
