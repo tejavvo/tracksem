@@ -25,9 +25,9 @@ export const DEFAULT_COURSES: Course[] = [
         id: "iss-quiz",
         name: "Quiz",
         weight: 10,
-        maxScore: 100,
+        maxScore: 160,
         score: null,
-        subItems: makeItems("iss", "Quiz", 2),
+        subItems: makeItems("iss", "Quiz", 2, 80),
       },
       {
         id: "iss-midsem",
@@ -226,9 +226,9 @@ export const DEFAULT_COURSES: Course[] = [
         id: "dsa-labs",
         name: "Labs",
         weight: 20,
-        maxScore: 100,
+        maxScore: 300,
         score: null,
-        subItems: makeItems("dsa", "Lab", 9),
+        subItems: makeItems("dsa", "Lab", 9, 300),
         bestOf: 8,
       },
       {
