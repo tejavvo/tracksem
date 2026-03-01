@@ -73,6 +73,16 @@ class GradesStore {
         this.courses = [...this.courses, created];
     }
 
+    /** Seed courses from the catalog for a given branch + semester */
+    async seedFromCatalog(branch: string, semester: string): Promise<void> {
+        const res = await fetch('/api/courses/seed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ branch, semester })
+        });
+        this.courses = await res.json();
+    }
+
     /** Delete a course */
     async deleteCourse(courseId: string): Promise<void> {
         await api('/api/courses', 'DELETE', { id: courseId });

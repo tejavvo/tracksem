@@ -39,27 +39,28 @@ The SQLite database (`data/tracksem.db`) is auto-created and seeded on first run
 ## courses
 
 | Course | Total Weight |
-|--------|-------------|
-| ISS    | 100% |
-| CSO    | 100% |
-| IoT    | 100% |
-| LA     | 100% |
-| DSA    | 92% ⚠ |
+| ------ | ------------ |
+| ISS    | 100%         |
+| CSO    | 100%         |
+| IoT    | 100%         |
+| LA     | 100%         |
+| DSA    | 92% ⚠        |
 
 ## grade scale
 
-| Letter | Range |
-|--------|-------|
-| A  | ≥ 90% |
-| A- | 85–89% |
-| B  | 80–84% |
-| B- | 75–79% |
-| C  | 70–74% |
-| C- | 65–69% |
-| D  | 60–64% |
-| F  | < 60% |
+| Letter | Range  |
+| ------ | ------ |
+| A      | ≥ 90%  |
+| A-     | 85–89% |
+| B      | 80–84% |
+| B-     | 75–79% |
+| C      | 70–74% |
+| C-     | 65–69% |
+| D      | 60–64% |
+| F      | < 60%  |
 
 ## Future Plans
-- [ ] Exprot and Import
-- [ ] Semester Support
+
+- [ ] Export and Import
+- [X] Semester Support
 - [ ] Multi-user Support
