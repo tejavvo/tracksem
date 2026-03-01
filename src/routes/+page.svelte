@@ -1,6 +1,7 @@
 <script lang="ts">
     import { grades } from "$lib/stores/grades.svelte";
     import CourseCard from "$lib/components/CourseCard.svelte";
+    import { BRANCHES, getSemesters, getCourses } from "$lib/data/courses";
     import { page } from "$app/state";
     import { createBrowserClient } from "@supabase/ssr";
     import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from "$env/static/public";
@@ -80,6 +81,28 @@
         creatingCourse = false;
         closeAddCourse();
     }
+
+    // ─── Onboarding state ───────────────────────────────────────────────────────
+
+    let selectedBranch = $state("");
+    let selectedSemester = $state("");
+    let seeding = $state(false);
+
+    const availableSemesters = $derived(
+        selectedBranch ? getSemesters(selectedBranch) : []
+    );
+    const previewCourses = $derived(
+        selectedBranch && selectedSemester
+            ? getCourses(selectedBranch, selectedSemester)
+            : []
+    );
+
+    async function handleSeed() {
+        if (!selectedBranch || !selectedSemester || seeding) return;
+        seeding = true;
+        await grades.seedFromCatalog(selectedBranch, selectedSemester);
+        seeding = false;
+    }
 </script>
 
 <div class="page">
@@ -119,18 +142,84 @@
 
     <!-- Course grid -->
     <main class="main">
-        <div class="section-label mono">// courses</div>
-        <div class="grid">
-            {#each grades.courses as course (course.id)}
-                <CourseCard {course} />
-            {/each}
+        {#if grades.courses.length === 0}
+            <!-- Onboarding -->
+            <div class="onboard-wrap">
+                <div class="onboard-card">
+                    <div class="onboard-header mono">// setup</div>
+                    <div class="onboard-sub">
+                        select your branch and semester to get started
+                    </div>
 
-            <div class="add-card" style="--accent: {newCourseColor}">
-                <button class="add-card-closed mono" onclick={openAddCourse}>
-                    + add course
-                </button>
+                    <select
+                        class="onboard-select mono"
+                        bind:value={selectedBranch}
+                        onchange={() => { selectedSemester = ""; }}
+                    >
+                        <option value="">select branch</option>
+                        {#each BRANCHES as branch}
+                            <option value={branch}>{branch}</option>
+                        {/each}
+                    </select>
+
+                    {#if selectedBranch}
+                        <select
+                            class="onboard-select mono"
+                            bind:value={selectedSemester}
+                        >
+                            <option value="">select semester</option>
+                            {#each availableSemesters as sem}
+                                <option value={sem}>{sem}</option>
+                            {/each}
+                        </select>
+                    {/if}
+
+                    {#if previewCourses.length > 0}
+                        <div class="onboard-preview">
+                            <div class="onboard-preview-label mono">// courses to add</div>
+                            {#each previewCourses as c}
+                                <div class="onboard-preview-item">
+                                    <span
+                                        class="onboard-dot"
+                                        style="background: {c.color}"
+                                    ></span>
+                                    <span class="mono">{c.name}</span>
+                                    <span class="onboard-full">{c.fullName}</span>
+                                    {#if c.components.length > 0}
+                                        <span class="onboard-comp-count mono">
+                                            {c.components.length} components
+                                        </span>
+                                    {:else}
+                                        <span class="onboard-comp-count mono">defaults</span>
+                                    {/if}
+                                </div>
+                            {/each}
+                        </div>
+
+                        <button
+                            class="onboard-btn mono"
+                            disabled={seeding}
+                            onclick={handleSeed}
+                        >
+                            {seeding ? "setting up..." : "confirm"}
+                        </button>
+                    {/if}
+                </div>
             </div>
-        </div>
+        {:else}
+            <div class="section-label mono">// courses</div>
+            <div class="grid">
+                {#each grades.courses as course (course.id)}
+                    <CourseCard {course} />
+                {/each}
+
+                <div class="add-card" style="--accent: {newCourseColor}">
+                    <button class="add-card-closed mono" onclick={openAddCourse}>
+                        + add course
+                    </button>
+                </div>
+            </div>
+        {/if}
 
         {#if addOpen}
             <button
@@ -491,6 +580,126 @@
         font-size: 0.7rem;
         color: oklch(0.35 0.02 265);
         margin-top: 2rem;
+    }
+
+    /* ── Onboarding ─────────────────────────────── */
+
+    .onboard-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 50vh;
+    }
+
+    .onboard-card {
+        width: min(480px, 100%);
+        background: oklch(0.12 0.02 265);
+        border: 1px solid oklch(1 0 0 / 12%);
+        border-radius: 12px;
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.8rem;
+        box-shadow: 0 20px 60px oklch(0 0 0 / 40%);
+    }
+
+    .onboard-header {
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        color: oklch(0.6 0.02 265);
+        text-transform: uppercase;
+    }
+
+    .onboard-sub {
+        font-size: 0.72rem;
+        color: oklch(0.45 0.02 265);
+    }
+
+    .onboard-select {
+        background: oklch(1 0 0 / 4%);
+        border: 1px solid oklch(1 0 0 / 10%);
+        border-radius: 6px;
+        padding: 0.45rem 0.6rem;
+        color: oklch(0.9 0.01 265);
+        font-size: 0.75rem;
+        outline: none;
+        cursor: pointer;
+        appearance: none;
+    }
+
+    .onboard-select:focus {
+        border-color: oklch(1 0 0 / 20%);
+        box-shadow: 0 0 0 1px oklch(1 0 0 / 10%);
+    }
+
+    .onboard-preview {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        padding: 0.6rem 0;
+    }
+
+    .onboard-preview-label {
+        font-size: 0.65rem;
+        color: oklch(0.4 0.02 265);
+        letter-spacing: 0.05em;
+        margin-bottom: 0.2rem;
+    }
+
+    .onboard-preview-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.72rem;
+        color: oklch(0.8 0.01 265);
+        padding: 0.3rem 0.5rem;
+        background: oklch(1 0 0 / 3%);
+        border-radius: 4px;
+    }
+
+    .onboard-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .onboard-full {
+        color: oklch(0.5 0.02 265);
+        font-size: 0.65rem;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .onboard-comp-count {
+        font-size: 0.6rem;
+        color: oklch(0.4 0.02 265);
+        flex-shrink: 0;
+    }
+
+    .onboard-btn {
+        font-size: 0.72rem;
+        background: none;
+        border: 1px solid oklch(1 0 0 / 12%);
+        border-radius: 6px;
+        color: oklch(0.6 0.02 265);
+        padding: 0.5rem 0.6rem;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .onboard-btn:hover:enabled {
+        color: oklch(0.9 0.01 265);
+        border-color: #22d3ee66;
+        background: #22d3ee18;
+    }
+
+    .onboard-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
     }
 
     /* ── Mobile ≤ 768px ──────────────────────── */
