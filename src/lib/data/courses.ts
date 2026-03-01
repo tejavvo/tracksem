@@ -327,14 +327,14 @@ export const SEM_DATA: Record<string, Record<string, Course[]>> = {
   CHD: {
     "Semester 1": [
       cr("ma5101", "MA5.101", "Discrete Structures", 0),
-      cr("hs8101", "HS8.101", "Making of the Contemporary World", 1),
+      cr("hs4102", "HS4.102", "Making of Contemporary India", 1),
       cr("cs0101", "CS0.101", "Computer Programming", 2),
       cr("ec2101", "EC2.101", "Digital Systems and Microcontroller", 3),
       cr("hs7101", "HS7.101", "Human Sciences Lab-1", 4),
     ],
     "Semester 2": [
       cr("ma2101", "MA2.101", "Linear Algebra", 0),
-      cr("hs4102", "HS4.102", "Making of Contemporary India", 1),
+      cr("hs8101", "HS8.101", "Making of the Contemporary World", 1),
       cr("hs0201", "HS0.201", "Thinking & Knowing in the Human Sciences - I", 2),
       cr("cs1201", "CS1.201", "Data Structures and Algorithms", 3),
       cr("cs6201", "CS6.201", "Introduction to Software Systems", 4),
