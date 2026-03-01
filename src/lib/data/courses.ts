@@ -16,7 +16,7 @@ function makeItems(
 
 export const DEFAULT_COURSES: Course[] = [
   {
-    id: "iss",
+    id: "cs6201",
     name: "ISS",
     fullName: "Information Security & Systems",
     color: "#22d3ee",
@@ -81,7 +81,7 @@ export const DEFAULT_COURSES: Course[] = [
     ],
   },
   {
-    id: "cso",
+    id: "cs2201",
     name: "CSO",
     fullName: "Computer Systems Organisation",
     color: "#a78bfa",
@@ -135,7 +135,7 @@ export const DEFAULT_COURSES: Course[] = [
     ],
   },
   {
-    id: "iot",
+    id: "cs3303",
     name: "IoT",
     fullName: "Internet of Things",
     color: "#34d399",
@@ -172,7 +172,7 @@ export const DEFAULT_COURSES: Course[] = [
     ],
   },
   {
-    id: "la",
+    id: "ma2101",
     name: "LA",
     fullName: "Linear Algebra",
     color: "#fb923c",
@@ -209,7 +209,7 @@ export const DEFAULT_COURSES: Course[] = [
     ],
   },
   {
-    id: "dsa",
+    id: "cs1201",
     name: "DSA",
     fullName: "Data Structures & Algorithms",
     color: "#f472b6",
@@ -226,7 +226,7 @@ export const DEFAULT_COURSES: Course[] = [
         id: "dsa-labs",
         name: "Labs",
         weight: 20,
-        maxScore: 300,
+        maxScore: 100,
         score: null,
         subItems: makeItems("dsa", "Lab", 9),
         bestOf: 8,
