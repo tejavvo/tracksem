@@ -2,6 +2,7 @@
     import type { PageProps } from "./$types";
     import { grades, computeCompPct } from "$lib/stores/grades.svelte";
     import { getGradeColor, getLetterGrade } from "$lib/grading";
+    import { predictGrade } from "$lib/curveGrading";
     import { tick } from "svelte";
     import { goto } from "$app/navigation";
 
@@ -19,11 +20,26 @@
         expanded = next;
     }
 
+    let statsOpen = $state<Set<string>>(new Set());
+    function toggleStats(id: string) {
+        const next = new Set(statsOpen);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        statsOpen = next;
+    }
+
     let confirmReset = $state(false);
     let editingName = $state<string | null>(null);
     let editingSubName = $state<string | null>(null);
 
     const gradeColor = $derived(getGradeColor(proj.grade));
+    const curved = $derived(grades.curvedGrade(data.courseId));
+
+    function handleClassStat(compId: string, field: 'classAvg' | 'classMedian' | 'classMax' | 'classStdDev', val: string) {
+        const num = val === "" ? null : parseFloat(val);
+        if (num === null || (!isNaN(num) && num >= 0))
+            grades.updateClassStats(data.courseId, compId, field, num);
+    }
 
     function handleScore(compId: string, val: string) {
         const num = val === "" ? null : parseFloat(val);
@@ -78,6 +94,16 @@
     function focusOnMount(node: HTMLElement) {
         tick().then(() => node.focus());
         return {};
+    }
+
+    function getCompPrediction(pct: number | null, comp: { classAvg?: number | null; classMedian?: number | null; classMax?: number | null; classStdDev?: number | null; maxScore: number }) {
+        if (pct === null || comp.classAvg == null) return null;
+        const score = (pct / 100) * comp.maxScore;
+        return predictGrade(score, comp.maxScore, comp.classAvg, {
+            median: comp.classMedian,
+            max: comp.classMax,
+            stdDev: comp.classStdDev,
+        });
     }
 </script>
 
@@ -156,17 +182,33 @@
                 </div>
             </div>
             <div class="hero-grade">
-                <div class="letter-grade mono" style="color: {gradeColor}">
-                    {getLetterGrade(proj.grade)}
-                </div>
-                {#if proj.grade !== null}
-                    <div class="pct-grade mono" style="color: {gradeColor}">
-                        {proj.grade.toFixed(2)}%
+                <div class="hero-grade-row">
+                    <div class="hero-grade-col">
+                        <div class="letter-grade mono" style="color: {gradeColor}">
+                            {getLetterGrade(proj.grade)}
+                        </div>
+                        {#if proj.grade !== null}
+                            <div class="pct-grade mono" style="color: {gradeColor}">
+                                {proj.grade.toFixed(2)}%
+                            </div>
+                            <div class="grade-note">absolute</div>
+                        {:else}
+                            <div class="grade-note">enter scores to see projection</div>
+                        {/if}
                     </div>
-                    <div class="grade-note">projected</div>
-                {:else}
-                    <div class="grade-note">enter scores to see projection</div>
-                {/if}
+                    {#if curved}
+                        <div class="hero-grade-divider"></div>
+                        <div class="hero-grade-col">
+                            <div class="letter-grade curved-letter mono" style="color: {curved.color}">
+                                {curved.letter}
+                            </div>
+                            <div class="pct-grade mono" style="color: {curved.color}">
+                                P{curved.percentile.toFixed(0)}
+                            </div>
+                            <div class="grade-note">curved</div>
+                        </div>
+                    {/if}
+                </div>
             </div>
         </div>
 
@@ -180,6 +222,9 @@
                     pct !== null ? (pct * comp.weight) / 100 : null}
                 {@const hasSubItems = comp.subItems && comp.subItems.length > 0}
                 {@const isOpen = expanded.has(comp.id)}
+                {@const isStatsOpen = statsOpen.has(comp.id)}
+                {@const compPred = getCompPrediction(pct, comp)}
+                {@const hasAnyStats = comp.classAvg != null}
 
                 <div class="comp-card" class:expanded={isOpen}>
                     <div class="comp-row">
@@ -346,6 +391,29 @@
                         >
                             {contrib !== null ? contrib.toFixed(2) + "%" : "—"}
                         </div>
+
+                        <!-- Curved prediction pill -->
+                        <div class="comp-cell curve-cell">
+                            {#if compPred}
+                                <span
+                                    class="curve-pill mono"
+                                    style="color: {compPred.color}; border-color: {compPred.color}40; background: {compPred.color}12"
+                                >
+                                    {compPred.letter}
+                                    <span class="curve-pctl">P{compPred.percentile.toFixed(0)}</span>
+                                </span>
+                            {:else if hasAnyStats}
+                                <span class="curve-pill mono dimmed" style="border-color: oklch(1 0 0 / 8%)">—</span>
+                            {/if}
+                        </div>
+
+                        <!-- Stats toggle -->
+                        <button
+                            class="stats-toggle-btn"
+                            class:active={isStatsOpen || hasAnyStats}
+                            onclick={() => toggleStats(comp.id)}
+                            title="class statistics"
+                        >📊</button>
 
                         <!-- Remove -->
                         <button
@@ -526,6 +594,79 @@
                             >
                                 + add {comp.name.toLowerCase()}
                             </button>
+                        </div>
+                    {/if}
+
+                    <!-- Class stats panel -->
+                    {#if isStatsOpen}
+                        <div class="stats-panel">
+                            <div class="stats-header mono">
+                                <span class="dimmed">📊 class statistics</span>
+                                {#if compPred}
+                                    <span class="stats-prediction" style="color: {compPred.color}">
+                                        predicted: {compPred.letter} (P{compPred.percentile.toFixed(1)})
+                                    </span>
+                                {/if}
+                            </div>
+                            <div class="stats-inputs">
+                                <div class="stats-field">
+                                    <label class="stats-label mono">avg</label>
+                                    <input
+                                        class="num-input mono stats-input"
+                                        type="number"
+                                        min="0"
+                                        max={comp.maxScore}
+                                        step="0.5"
+                                        placeholder="class avg"
+                                        value={comp.classAvg ?? ""}
+                                        oninput={(e) => handleClassStat(comp.id, 'classAvg', (e.target as HTMLInputElement).value)}
+                                    />
+                                </div>
+                                <div class="stats-field">
+                                    <label class="stats-label mono">median</label>
+                                    <input
+                                        class="num-input mono stats-input"
+                                        type="number"
+                                        min="0"
+                                        max={comp.maxScore}
+                                        step="0.5"
+                                        placeholder="optional"
+                                        value={comp.classMedian ?? ""}
+                                        oninput={(e) => handleClassStat(comp.id, 'classMedian', (e.target as HTMLInputElement).value)}
+                                    />
+                                </div>
+                                <div class="stats-field">
+                                    <label class="stats-label mono">max</label>
+                                    <input
+                                        class="num-input mono stats-input"
+                                        type="number"
+                                        min="0"
+                                        max={comp.maxScore}
+                                        step="0.5"
+                                        placeholder="optional"
+                                        value={comp.classMax ?? ""}
+                                        oninput={(e) => handleClassStat(comp.id, 'classMax', (e.target as HTMLInputElement).value)}
+                                    />
+                                </div>
+                                <div class="stats-field">
+                                    <label class="stats-label mono">σ</label>
+                                    <input
+                                        class="num-input mono stats-input"
+                                        type="number"
+                                        min="0"
+                                        step="0.5"
+                                        placeholder="auto"
+                                        value={comp.classStdDev ?? ""}
+                                        oninput={(e) => handleClassStat(comp.id, 'classStdDev', (e.target as HTMLInputElement).value)}
+                                    />
+                                </div>
+                            </div>
+                            <div class="stats-hint mono">
+                                enter the class average to predict your grade on the curve
+                                {#if !comp.classStdDev && comp.classAvg != null}
+                                    · σ auto-estimated
+                                {/if}
+                            </div>
                         </div>
                     {/if}
                 </div>
@@ -709,6 +850,22 @@
     .hero-grade {
         text-align: right;
     }
+    .hero-grade-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 1.5rem;
+    }
+    .hero-grade-col {
+        text-align: right;
+    }
+    .hero-grade-divider {
+        width: 1px;
+        align-self: stretch;
+        background: oklch(1 0 0 / 12%);
+    }
+    .curved-letter {
+        font-size: 2.8rem;
+    }
     .letter-grade {
         font-size: 3.5rem;
         font-weight: 800;
@@ -753,7 +910,7 @@
 
     .comp-row {
         display: grid;
-        grid-template-columns: 28px 1fr 100px 180px 140px 70px 32px;
+        grid-template-columns: 28px 1fr 100px 180px 140px 70px auto 28px 32px;
         align-items: center;
         gap: 0.5rem;
         padding: 0.65rem 0.75rem;
@@ -966,6 +1123,102 @@
         font-size: 0.85rem;
     }
 
+    /* Curve pill */
+    .curve-cell {
+        justify-content: flex-end;
+        min-width: 56px;
+    }
+    .curve-pill {
+        font-size: 0.62rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        border: 1px solid;
+        border-radius: 10px;
+        padding: 0.1rem 0.45rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        white-space: nowrap;
+        transition: all 0.2s ease;
+    }
+    .curve-pctl {
+        font-size: 0.55rem;
+        opacity: 0.7;
+    }
+
+    /* Stats toggle button */
+    .stats-toggle-btn {
+        background: none;
+        border: none;
+        font-size: 0.8rem;
+        cursor: pointer;
+        padding: 0.1rem 0.2rem;
+        border-radius: 4px;
+        line-height: 1;
+        opacity: 0.25;
+        transition: all 0.15s;
+        filter: grayscale(100%);
+    }
+    .stats-toggle-btn:hover {
+        opacity: 0.7;
+        filter: grayscale(0%);
+    }
+    .stats-toggle-btn.active {
+        opacity: 0.8;
+        filter: grayscale(0%);
+    }
+
+    /* Class stats panel */
+    .stats-panel {
+        border-top: 1px solid oklch(1 0 0 / 7%);
+        padding: 0.6rem 0.75rem 0.75rem 2.25rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        background: oklch(0.09 0.025 265);
+    }
+    .stats-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.68rem;
+        gap: 0.5rem;
+    }
+    .stats-prediction {
+        font-weight: 600;
+        font-size: 0.7rem;
+    }
+    .stats-inputs {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+    .stats-field {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+    .stats-label {
+        font-size: 0.62rem;
+        color: oklch(0.5 0.02 265);
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        min-width: 2.5rem;
+    }
+    .stats-input {
+        width: 68px;
+        border-color: oklch(1 0 0 / 12%);
+    }
+    .stats-input:focus {
+        border-color: #a78bfa50;
+        box-shadow: 0 0 0 1px #a78bfa20;
+    }
+    .stats-hint {
+        font-size: 0.58rem;
+        color: oklch(0.38 0.02 265);
+        line-height: 1.4;
+    }
+
     /* Sub-items panel */
     .sub-panel {
         border-top: 1px solid oklch(1 0 0 / 7%);
@@ -1131,12 +1384,15 @@
         }
         .hero-grade {
             text-align: left;
-            display: flex;
-            align-items: baseline;
-            gap: 0.6rem;
+        }
+        .hero-grade-row {
+            gap: 1rem;
         }
         .letter-grade {
             font-size: 2.5rem;
+        }
+        .curved-letter {
+            font-size: 2rem;
         }
         .pct-grade {
             font-size: 1rem;
@@ -1151,14 +1407,13 @@
         /* ── Folded component card ────────────── */
         .comp-row {
             /*
-             * Original 7 cols: expand | name | weight | score | pct | contrib | remove
-             * Fold into 3 rows:
-             *   Row 1:  expand  name .............. weight   remove
+             * Fold into 4 rows:
+             *   Row 1:  expand  name .............. weight  stats  remove
              *   Row 2:          score-area           pct-area
-             *   Row 3:          contrib-area
+             *   Row 3:          contrib-area          curve-area
              */
             display: grid;
-            grid-template-columns: 28px 1fr auto auto 28px;
+            grid-template-columns: 28px 1fr auto auto 28px 28px;
             grid-template-rows: auto auto auto;
             gap: 0.3rem 0.4rem;
             padding: 0.6rem 0.65rem;
@@ -1169,14 +1424,16 @@
         .expand-btn   { grid-column: 1; grid-row: 1; }
         .comp-name-cell { grid-column: 2; grid-row: 1; }
         .weight-cell  { grid-column: 3 / 5; grid-row: 1; }
-        .remove-btn   { grid-column: 5; grid-row: 1; align-self: center; }
+        .stats-toggle-btn { grid-column: 5; grid-row: 1; align-self: center; }
+        .remove-btn   { grid-column: 6; grid-row: 1; align-self: center; }
 
         /* Row 2 */
         .score-cell   { grid-column: 2 / 4; grid-row: 2; justify-content: flex-start; }
-        .pct-cell     { grid-column: 4 / 6; grid-row: 2; justify-content: flex-end; }
+        .pct-cell     { grid-column: 4 / 7; grid-row: 2; justify-content: flex-end; }
 
         /* Row 3 */
-        .contrib-cell { grid-column: 2 / 6; grid-row: 3; justify-content: flex-start; font-size: 0.65rem; }
+        .contrib-cell { grid-column: 2 / 4; grid-row: 3; justify-content: flex-start; font-size: 0.65rem; }
+        .curve-cell   { grid-column: 4 / 7; grid-row: 3; justify-content: flex-end; }
 
         .bar-stack {
             min-width: 50px;
@@ -1193,17 +1450,19 @@
             padding-left: 1rem;
             padding-right: 0.5rem;
         }
+        .stats-panel {
+            padding-left: 1rem;
+            padding-right: 0.5rem;
+        }
+        .stats-inputs {
+            flex-direction: column;
+            gap: 0.4rem;
+        }
         .best-of-row {
             flex-wrap: wrap;
         }
 
         .sub-row {
-            /*
-             * Original 4 cols: name | score | pct | remove
-             * Fold into 2 rows:
-             *   Row 1:  name ............ pct   remove
-             *   Row 2:  score-area
-             */
             display: grid;
             grid-template-columns: 1fr auto 28px;
             grid-template-rows: auto auto;

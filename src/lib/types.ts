@@ -13,6 +13,10 @@ export type Component = {
   score: number | null;
   subItems?: SubItem[];
   bestOf?: number;
+  classAvg?: number | null;
+  classMedian?: number | null;
+  classMax?: number | null;
+  classStdDev?: number | null;
 };
 
 export type Course = {

@@ -1,4 +1,5 @@
 import type { Course, Component, SubItem } from '$lib/types';
+import { predictGrade, percentileToGrade, getCurvedGradeColor } from '$lib/curveGrading';
 
 function generateId(): string {
     return crypto.randomUUID();
@@ -198,6 +199,15 @@ class GradesStore {
         await this.reload();
     }
 
+    // ─── Class stats ────────────────────────────────────────────────────────────
+
+    updateClassStats(courseId: string, componentId: string, field: 'classAvg' | 'classMedian' | 'classMax' | 'classStdDev', value: number | null): void {
+        const comp = this.#getComp(courseId, componentId);
+        if (!comp) return;
+        comp[field] = value;
+        api('/api/components', 'PATCH', { id: componentId, field, value });
+    }
+
     // ─── Derived computations ───────────────────────────────────────────────────
 
     projectedGrade(courseId: string): { grade: number | null; filled: number; total: number } {
@@ -232,6 +242,39 @@ class GradesStore {
         const course = this.courses.find((c) => c.id === courseId);
         if (!course) return 0;
         return course.components.reduce((sum, c) => sum + c.weight, 0);
+    }
+
+    /** Compute an overall curved grade across components that have both a score AND class stats */
+    curvedGrade(courseId: string): { letter: string; color: string; percentile: number } | null {
+        const course = this.courses.find((c) => c.id === courseId);
+        if (!course) return null;
+
+        let weightedPercentile = 0;
+        let filledWeight = 0;
+
+        for (const comp of course.components) {
+            const pct = computeCompPct(comp);
+            if (pct === null || comp.classAvg == null) continue;
+
+            const score = (pct / 100) * comp.maxScore;
+            const pred = predictGrade(score, comp.maxScore, comp.classAvg, {
+                median: comp.classMedian,
+                max: comp.classMax,
+                stdDev: comp.classStdDev,
+            });
+
+            weightedPercentile += pred.percentile * (comp.weight / 100);
+            filledWeight += comp.weight;
+        }
+
+        if (filledWeight === 0) return null;
+
+        const overallPercentile = (weightedPercentile / filledWeight) * 100;
+
+        const letter = percentileToGrade(overallPercentile);
+        const color = getCurvedGradeColor(letter);
+
+        return { letter, color, percentile: overallPercentile };
     }
 
     // ─── Private helpers ────────────────────────────────────────────────────────

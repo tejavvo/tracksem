@@ -12,6 +12,7 @@
     const totalWeight = $derived(grades.totalWeight(course.id));
     const gradeColor = $derived(getGradeColor(proj.grade));
     const letter = $derived(getLetterGrade(proj.grade));
+    const curved = $derived(grades.curvedGrade(course.id));
 
 
 </script>
@@ -30,6 +31,11 @@
             <div class="grade-badge" style="--g-color: {gradeColor}">
                 <span class="letter mono">{letter}</span>
             </div>
+            {#if curved}
+                <div class="grade-badge curved-badge" style="--g-color: {curved.color}">
+                    <span class="letter mono" style="font-size: 0.8rem">~{curved.letter}</span>
+                </div>
+            {/if}
         </div>
 
         <div class="full-name">{course.fullName}</div>
@@ -146,6 +152,7 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 0.35rem;
     }
 
     .course-tag {
@@ -156,6 +163,7 @@
         border: 1px solid;
         border-radius: 4px;
         padding: 0.15rem 0.5rem;
+        margin-right: auto;
     }
 
     .grade-badge {
@@ -167,6 +175,13 @@
         display: flex;
         align-items: center;
         justify-content: center;
+    }
+
+    .curved-badge {
+        width: auto;
+        height: 28px;
+        padding: 0 0.35rem;
+        border-radius: 6px;
     }
 
     .letter {

@@ -62,7 +62,7 @@ async function fetchAllCourses(supabase: SupabaseClient): Promise<Course[]> {
   const { data: compRows, error: compErr } = await supabase
     .from("components")
     .select(
-      "id, course_id, name, weight, max_score, score, best_of, sort_order",
+      "id, course_id, name, weight, max_score, score, best_of, sort_order, class_avg, class_median, class_max, class_std_dev",
     )
     .in("course_id", courseIds)
     .order("sort_order", { ascending: true });
@@ -114,6 +114,10 @@ async function fetchAllCourses(supabase: SupabaseClient): Promise<Course[]> {
       score: c.score,
       subItems: subs && subs.length > 0 ? subs : undefined,
       bestOf: c.best_of ?? undefined,
+      classAvg: c.class_avg ?? undefined,
+      classMedian: c.class_median ?? undefined,
+      classMax: c.class_max ?? undefined,
+      classStdDev: c.class_std_dev ?? undefined,
     });
   }
 
@@ -409,6 +413,10 @@ const COMP_COL_MAP: Record<string, string> = {
   maxScore: "max_score",
   name: "name",
   bestOf: "best_of",
+  classAvg: "class_avg",
+  classMedian: "class_median",
+  classMax: "class_max",
+  classStdDev: "class_std_dev",
 };
 
 export async function updateComponentField(
