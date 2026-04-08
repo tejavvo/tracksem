@@ -3,6 +3,10 @@ export type SubItem = {
   name: string;
   score: number | null;
   maxScore: number;
+  classAvg?: number | null;
+  classMedian?: number | null;
+  classMax?: number | null;
+  classStdDev?: number | null;
 };
 
 export type Component = {
@@ -13,6 +17,7 @@ export type Component = {
   score: number | null;
   subItems?: SubItem[];
   bestOf?: number;
+  statsMode?: 'global' | 'per-sub';
   classAvg?: number | null;
   classMedian?: number | null;
   classMax?: number | null;

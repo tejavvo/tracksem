@@ -208,6 +208,20 @@ class GradesStore {
         api('/api/components', 'PATCH', { id: componentId, field, value });
     }
 
+    updateStatsMode(courseId: string, componentId: string, mode: 'global' | 'per-sub'): void {
+        const comp = this.#getComp(courseId, componentId);
+        if (!comp) return;
+        comp.statsMode = mode;
+        api('/api/components', 'PATCH', { id: componentId, field: 'statsMode', value: mode });
+    }
+
+    updateSubClassStats(courseId: string, componentId: string, subItemId: string, field: 'classAvg' | 'classMedian' | 'classMax' | 'classStdDev', value: number | null): void {
+        const sub = this.#getSub(courseId, componentId, subItemId);
+        if (!sub) return;
+        sub[field] = value;
+        api('/api/sub-items', 'PATCH', { id: subItemId, field, value });
+    }
+
     // ─── Derived computations ───────────────────────────────────────────────────
 
     projectedGrade(courseId: string): { grade: number | null; filled: number; total: number } {
@@ -253,18 +267,38 @@ class GradesStore {
         let filledWeight = 0;
 
         for (const comp of course.components) {
-            const pct = computeCompPct(comp);
-            if (pct === null || comp.classAvg == null) continue;
+            if (comp.statsMode === 'per-sub' && comp.subItems && comp.subItems.length > 0) {
+                // Per-sub mode: average percentilesof sub-items that have stats
+                const subPreds: number[] = [];
+                for (const sub of comp.subItems) {
+                    if (sub.score === null || sub.classAvg == null) continue;
+                    const pred = predictGrade(sub.score, sub.maxScore, sub.classAvg, {
+                        median: sub.classMedian,
+                        max: sub.classMax,
+                        stdDev: sub.classStdDev,
+                    });
+                    subPreds.push(pred.percentile);
+                }
+                if (subPreds.length > 0) {
+                    const avgPercentile = subPreds.reduce((a, b) => a + b, 0) / subPreds.length;
+                    weightedPercentile += avgPercentile * (comp.weight / 100);
+                    filledWeight += comp.weight;
+                }
+            } else {
+                // Global mode
+                const pct = computeCompPct(comp);
+                if (pct === null || comp.classAvg == null) continue;
 
-            const score = (pct / 100) * comp.maxScore;
-            const pred = predictGrade(score, comp.maxScore, comp.classAvg, {
-                median: comp.classMedian,
-                max: comp.classMax,
-                stdDev: comp.classStdDev,
-            });
+                const score = (pct / 100) * comp.maxScore;
+                const pred = predictGrade(score, comp.maxScore, comp.classAvg, {
+                    median: comp.classMedian,
+                    max: comp.classMax,
+                    stdDev: comp.classStdDev,
+                });
 
-            weightedPercentile += pred.percentile * (comp.weight / 100);
-            filledWeight += comp.weight;
+                weightedPercentile += pred.percentile * (comp.weight / 100);
+                filledWeight += comp.weight;
+            }
         }
 
         if (filledWeight === 0) return null;

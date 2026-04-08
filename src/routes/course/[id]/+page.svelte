@@ -41,6 +41,20 @@
             grades.updateClassStats(data.courseId, compId, field, num);
     }
 
+    function handleSubClassStat(compId: string, subId: string, field: 'classAvg' | 'classMedian' | 'classMax' | 'classStdDev', val: string) {
+        const num = val === "" ? null : parseFloat(val);
+        if (num === null || (!isNaN(num) && num >= 0))
+            grades.updateSubClassStats(data.courseId, compId, subId, field, num);
+    }
+
+    let subStatsOpen = $state<Set<string>>(new Set());
+    function toggleSubStats(id: string) {
+        const next = new Set(subStatsOpen);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        subStatsOpen = next;
+    }
+
     function handleScore(compId: string, val: string) {
         const num = val === "" ? null : parseFloat(val);
         if (num === null || (!isNaN(num) && num >= 0))
@@ -486,6 +500,9 @@
                                         ? (sub.score / sub.maxScore) * 100
                                         : null}
                                 {@const subColor = getGradeColor(subPct)}
+                                {@const isPerSub = comp.statsMode === 'per-sub'}
+                                {@const subPred = isPerSub ? getCompPrediction(subPct, sub) : null}
+                                {@const isSubStatsOpen = subStatsOpen.has(sub.id)}
                                 <div class="sub-row">
                                     <div class="sub-name-cell">
                                         {#if editingSubName === sub.id}
@@ -574,6 +591,29 @@
                                         {/if}
                                     </div>
 
+                                    <!-- Per-sub curve pill -->
+                                    {#if isPerSub}
+                                        <div class="sub-curve-cell">
+                                            {#if subPred}
+                                                <span
+                                                    class="curve-pill mono"
+                                                    style="color: {subPred.color}; border-color: {subPred.color}40; background: {subPred.color}12"
+                                                >
+                                                    {subPred.letter}
+                                                    <span class="curve-pctl">P{subPred.percentile.toFixed(0)}</span>
+                                                </span>
+                                            {:else if sub.classAvg != null}
+                                                <span class="curve-pill mono dimmed" style="border-color: oklch(1 0 0 / 8%)">—</span>
+                                            {/if}
+                                        </div>
+                                        <button
+                                            class="stats-toggle-btn sub-stats-btn"
+                                            class:active={isSubStatsOpen || sub.classAvg != null}
+                                            onclick={() => toggleSubStats(sub.id)}
+                                            title="sub-item stats"
+                                        >📊</button>
+                                    {/if}
+
                                     <button
                                         class="remove-btn small"
                                         onclick={() =>
@@ -585,6 +625,54 @@
                                         title="remove">×</button
                                     >
                                 </div>
+
+                                <!-- Per-sub stats panel -->
+                                {#if isPerSub && isSubStatsOpen}
+                                    <div class="sub-stats-panel">
+                                        <div class="stats-inputs">
+                                            <div class="stats-field">
+                                                <label class="stats-label mono">avg</label>
+                                                <input
+                                                    class="num-input mono stats-input"
+                                                    type="number" min="0" max={sub.maxScore} step="0.5"
+                                                    placeholder="class avg"
+                                                    value={sub.classAvg ?? ""}
+                                                    oninput={(e) => handleSubClassStat(comp.id, sub.id, 'classAvg', (e.target as HTMLInputElement).value)}
+                                                />
+                                            </div>
+                                            <div class="stats-field">
+                                                <label class="stats-label mono">median</label>
+                                                <input
+                                                    class="num-input mono stats-input"
+                                                    type="number" min="0" max={sub.maxScore} step="0.5"
+                                                    placeholder="optional"
+                                                    value={sub.classMedian ?? ""}
+                                                    oninput={(e) => handleSubClassStat(comp.id, sub.id, 'classMedian', (e.target as HTMLInputElement).value)}
+                                                />
+                                            </div>
+                                            <div class="stats-field">
+                                                <label class="stats-label mono">max</label>
+                                                <input
+                                                    class="num-input mono stats-input"
+                                                    type="number" min="0" max={sub.maxScore} step="0.5"
+                                                    placeholder="optional"
+                                                    value={sub.classMax ?? ""}
+                                                    oninput={(e) => handleSubClassStat(comp.id, sub.id, 'classMax', (e.target as HTMLInputElement).value)}
+                                                />
+                                            </div>
+                                            <div class="stats-field">
+                                                <label class="stats-label mono">σ</label>
+                                                <input
+                                                    class="num-input mono stats-input"
+                                                    type="number" min="0" step="0.5"
+                                                    placeholder="auto"
+                                                    value={sub.classStdDev ?? ""}
+                                                    oninput={(e) => handleSubClassStat(comp.id, sub.id, 'classStdDev', (e.target as HTMLInputElement).value)}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                {/if}
                             {/each}
 
                             <button
@@ -602,71 +690,93 @@
                         <div class="stats-panel">
                             <div class="stats-header mono">
                                 <span class="dimmed">📊 class statistics</span>
-                                {#if compPred}
-                                    <span class="stats-prediction" style="color: {compPred.color}">
-                                        predicted: {compPred.letter} (P{compPred.percentile.toFixed(1)})
-                                    </span>
-                                {/if}
-                            </div>
-                            <div class="stats-inputs">
-                                <div class="stats-field">
-                                    <label class="stats-label mono">avg</label>
-                                    <input
-                                        class="num-input mono stats-input"
-                                        type="number"
-                                        min="0"
-                                        max={comp.maxScore}
-                                        step="0.5"
-                                        placeholder="class avg"
-                                        value={comp.classAvg ?? ""}
-                                        oninput={(e) => handleClassStat(comp.id, 'classAvg', (e.target as HTMLInputElement).value)}
-                                    />
-                                </div>
-                                <div class="stats-field">
-                                    <label class="stats-label mono">median</label>
-                                    <input
-                                        class="num-input mono stats-input"
-                                        type="number"
-                                        min="0"
-                                        max={comp.maxScore}
-                                        step="0.5"
-                                        placeholder="optional"
-                                        value={comp.classMedian ?? ""}
-                                        oninput={(e) => handleClassStat(comp.id, 'classMedian', (e.target as HTMLInputElement).value)}
-                                    />
-                                </div>
-                                <div class="stats-field">
-                                    <label class="stats-label mono">max</label>
-                                    <input
-                                        class="num-input mono stats-input"
-                                        type="number"
-                                        min="0"
-                                        max={comp.maxScore}
-                                        step="0.5"
-                                        placeholder="optional"
-                                        value={comp.classMax ?? ""}
-                                        oninput={(e) => handleClassStat(comp.id, 'classMax', (e.target as HTMLInputElement).value)}
-                                    />
-                                </div>
-                                <div class="stats-field">
-                                    <label class="stats-label mono">σ</label>
-                                    <input
-                                        class="num-input mono stats-input"
-                                        type="number"
-                                        min="0"
-                                        step="0.5"
-                                        placeholder="auto"
-                                        value={comp.classStdDev ?? ""}
-                                        oninput={(e) => handleClassStat(comp.id, 'classStdDev', (e.target as HTMLInputElement).value)}
-                                    />
+                                <div class="stats-header-right">
+                                    {#if hasSubItems}
+                                        <div class="mode-toggle mono">
+                                            <button
+                                                class="mode-btn"
+                                                class:active={comp.statsMode !== 'per-sub'}
+                                                onclick={() => grades.updateStatsMode(data.courseId, comp.id, 'global')}
+                                            >global</button>
+                                            <button
+                                                class="mode-btn"
+                                                class:active={comp.statsMode === 'per-sub'}
+                                                onclick={() => grades.updateStatsMode(data.courseId, comp.id, 'per-sub')}
+                                            >per-sub</button>
+                                        </div>
+                                    {/if}
+                                    {#if compPred && comp.statsMode !== 'per-sub'}
+                                        <span class="stats-prediction" style="color: {compPred.color}">
+                                            predicted: {compPred.letter} (P{compPred.percentile.toFixed(1)})
+                                        </span>
+                                    {/if}
                                 </div>
                             </div>
-                            <div class="stats-hint mono">
-                                enter the class average to predict your grade on the curve
-                                {#if !comp.classStdDev && comp.classAvg != null}
-                                    · σ auto-estimated
-                                {/if}
-                            </div>
+                            {#if comp.statsMode !== 'per-sub'}
+                                <div class="stats-inputs">
+                                    <div class="stats-field">
+                                        <label class="stats-label mono">avg</label>
+                                        <input
+                                            class="num-input mono stats-input"
+                                            type="number"
+                                            min="0"
+                                            max={comp.maxScore}
+                                            step="0.5"
+                                            placeholder="class avg"
+                                            value={comp.classAvg ?? ""}
+                                            oninput={(e) => handleClassStat(comp.id, 'classAvg', (e.target as HTMLInputElement).value)}
+                                        />
+                                    </div>
+                                    <div class="stats-field">
+                                        <label class="stats-label mono">median</label>
+                                        <input
+                                            class="num-input mono stats-input"
+                                            type="number"
+                                            min="0"
+                                            max={comp.maxScore}
+                                            step="0.5"
+                                            placeholder="optional"
+                                            value={comp.classMedian ?? ""}
+                                            oninput={(e) => handleClassStat(comp.id, 'classMedian', (e.target as HTMLInputElement).value)}
+                                        />
+                                    </div>
+                                    <div class="stats-field">
+                                        <label class="stats-label mono">max</label>
+                                        <input
+                                            class="num-input mono stats-input"
+                                            type="number"
+                                            min="0"
+                                            max={comp.maxScore}
+                                            step="0.5"
+                                            placeholder="optional"
+                                            value={comp.classMax ?? ""}
+                                            oninput={(e) => handleClassStat(comp.id, 'classMax', (e.target as HTMLInputElement).value)}
+                                        />
+                                    </div>
+                                    <div class="stats-field">
+                                        <label class="stats-label mono">σ</label>
+                                        <input
+                                            class="num-input mono stats-input"
+                                            type="number"
+                                            min="0"
+                                            step="0.5"
+                                            placeholder="auto"
+                                            value={comp.classStdDev ?? ""}
+                                            oninput={(e) => handleClassStat(comp.id, 'classStdDev', (e.target as HTMLInputElement).value)}
+                                        />
+                                    </div>
+                                </div>
+                                <div class="stats-hint mono">
+                                    enter the class average to predict your grade on the curve
+                                    {#if !comp.classStdDev && comp.classAvg != null}
+                                        · σ auto-estimated
+                                    {/if}
+                                </div>
+                            {:else}
+                                <div class="stats-hint mono">
+                                    use the 📊 button on each sub-item to enter individual stats
+                                </div>
+                            {/if}
                         </div>
                     {/if}
                 </div>
@@ -1217,6 +1327,57 @@
         font-size: 0.58rem;
         color: oklch(0.38 0.02 265);
         line-height: 1.4;
+    }
+
+    /* Mode toggle (global / per-sub) */
+    .stats-header-right {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .mode-toggle {
+        display: flex;
+        border: 1px solid oklch(1 0 0 / 12%);
+        border-radius: 5px;
+        overflow: hidden;
+    }
+    .mode-btn {
+        font-size: 0.58rem;
+        padding: 0.15rem 0.5rem;
+        background: none;
+        border: none;
+        color: oklch(0.45 0.02 265);
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .mode-btn:not(:last-child) {
+        border-right: 1px solid oklch(1 0 0 / 12%);
+    }
+    .mode-btn.active {
+        background: oklch(1 0 0 / 8%);
+        color: oklch(0.85 0.01 265);
+    }
+    .mode-btn:hover:not(.active) {
+        background: oklch(1 0 0 / 4%);
+    }
+
+    /* Per-sub-item stats panel */
+    .sub-stats-panel {
+        padding: 0.35rem 0.5rem 0.35rem 1.5rem;
+        background: oklch(0.085 0.02 265);
+        border-top: 1px solid oklch(1 0 0 / 5%);
+        border-bottom: 1px solid oklch(1 0 0 / 5%);
+    }
+    .sub-stats-panel .stats-inputs {
+        gap: 0.5rem;
+    }
+    .sub-curve-cell {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+    }
+    .sub-stats-btn {
+        font-size: 0.65rem;
     }
 
     /* Sub-items panel */
