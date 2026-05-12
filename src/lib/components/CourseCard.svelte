@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { grades, computeCompPct } from "$lib/stores/grades.svelte";
+    import { grades, computeEffectiveCompPct } from "$lib/stores/grades.svelte";
     import { getGradeColor, getLetterGrade } from "$lib/grading";
     import type { Course } from "$lib/types";
 
@@ -32,8 +32,8 @@
                 <span class="letter mono">{letter}</span>
             </div>
             {#if curved}
-                <div class="grade-badge curved-badge" style="--g-color: {curved.color}">
-                    <span class="letter mono" style="font-size: 0.8rem">~{curved.letter}</span>
+                <div class="grade-badge curved-badge" style="--g-color: {curved.color}" title="relative grade">
+                    <span class="letter mono">{curved.letter}</span>
                 </div>
             {/if}
         </div>
@@ -55,7 +55,7 @@
         <!-- Component bars -->
         <div class="bars">
             {#each course.components as comp}
-                {@const pct = computeCompPct(comp)}
+                {@const pct = computeEffectiveCompPct(course, comp)}
                 {@const barColor = getGradeColor(pct)}
                 <div class="bar-row">
                     <div class="bar-label mono">{comp.name}</div>
@@ -178,10 +178,20 @@
     }
 
     .curved-badge {
-        width: auto;
-        height: 28px;
-        padding: 0 0.35rem;
-        border-radius: 6px;
+        position: relative;
+    }
+
+    .curved-badge::after {
+        content: "";
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 4px;
+        height: 4px;
+        border-radius: 999px;
+        background: var(--g-color);
+        opacity: 0.75;
+        box-shadow: 0 0 8px color-mix(in oklch, var(--g-color) 45%, transparent);
     }
 
     .letter {

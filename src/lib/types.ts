@@ -7,6 +7,7 @@ export type SubItem = {
   classMedian?: number | null;
   classMax?: number | null;
   classStdDev?: number | null;
+  scaleTargetId?: string | null;
 };
 
 export type Component = {
@@ -18,6 +19,7 @@ export type Component = {
   subItems?: SubItem[];
   bestOf?: number;
   statsMode?: 'global' | 'per-sub';
+  scaleTargetId?: string | null;
   classAvg?: number | null;
   classMedian?: number | null;
   classMax?: number | null;

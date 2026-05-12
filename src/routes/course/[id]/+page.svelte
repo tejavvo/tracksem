@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { PageProps } from "./$types";
-    import { grades, computeCompPct } from "$lib/stores/grades.svelte";
+    import { grades, computeEffectiveCompPct, computeEffectiveSubPct, getScaleTargetPct } from "$lib/stores/grades.svelte";
     import { getGradeColor, getLetterGrade } from "$lib/grading";
     import { predictGrade } from "$lib/curveGrading";
     import { tick } from "svelte";
@@ -83,6 +83,14 @@
         const num = parseFloat(val);
         if (!isNaN(num) && num > 0)
             grades.updateMaxScore(data.courseId, compId, num);
+    }
+
+    function handleScaleTarget(compId: string, val: string) {
+        grades.updateScaleTarget(data.courseId, compId, val || null);
+    }
+
+    function handleSubScaleTarget(compId: string, subId: string, val: string) {
+        grades.updateSubScaleTarget(data.courseId, compId, subId, val || null);
     }
 
     function handleBestOf(compId: string, val: string, total: number) {
@@ -230,15 +238,16 @@
 
         <div class="comp-list">
             {#each course.components as comp (comp.id)}
-                {@const pct = computeCompPct(comp)}
+                {@const scaledPct = getScaleTargetPct(course, comp.scaleTargetId)}
+                {@const pct = computeEffectiveCompPct(course, comp)}
                 {@const barColor = getGradeColor(pct)}
                 {@const contrib =
                     pct !== null ? (pct * comp.weight) / 100 : null}
                 {@const hasSubItems = comp.subItems && comp.subItems.length > 0}
                 {@const isOpen = expanded.has(comp.id)}
                 {@const isStatsOpen = statsOpen.has(comp.id)}
-                {@const compPred = getCompPrediction(pct, comp)}
-                {@const hasAnyStats = comp.classAvg != null}
+                {@const compPred = comp.scaleTargetId ? null : getCompPrediction(pct, comp)}
+                {@const hasAnyStats = !comp.scaleTargetId && comp.classAvg != null}
 
                 <div class="comp-card" class:expanded={isOpen}>
                     <div class="comp-row">
@@ -329,7 +338,46 @@
 
                         <!-- Score -->
                         <div class="comp-cell score-cell">
-                            {#if !hasSubItems}
+                            {#if comp.scaleTargetId}
+                                <div class="scaled-score-control">
+                                    <label class="scaled-select-wrap mono">
+                                        <span>scaled</span>
+                                        <select
+                                            class="scaled-select mono"
+                                            value={comp.scaleTargetId}
+                                            aria-label="change scale target"
+                                            onchange={(e) => handleScaleTarget(comp.id, (e.target as HTMLSelectElement).value)}
+                                        >
+                                            {#each course.components as target}
+                                                {#if target.id !== comp.id}
+                                                    <option value={target.id}>{target.name}</option>
+                                                    {#each target.subItems ?? [] as sub}
+                                                        <option value={sub.id}>↳ {target.name} / {sub.name}</option>
+                                                    {/each}
+                                                {/if}
+                                            {/each}
+                                        </select>
+                                        <span class="scaled-target-label">
+                                            {#each course.components as target}
+                                                {#if target.id === comp.scaleTargetId}
+                                                    {target.name}
+                                                {/if}
+                                                {#each target.subItems ?? [] as sub}
+                                                    {#if sub.id === comp.scaleTargetId}
+                                                        ↳ {target.name} / {sub.name}
+                                                    {/if}
+                                                {/each}
+                                            {/each}
+                                        </span>
+                                    </label>
+                                    <button
+                                        class="scaled-clear-btn"
+                                        title="turn off scaling"
+                                        aria-label="turn off scaling"
+                                        onclick={() => handleScaleTarget(comp.id, "")}
+                                    >×</button>
+                                </div>
+                            {:else if !hasSubItems}
                                 <input
                                     class="num-input mono score-input"
                                     type="number"
@@ -425,9 +473,16 @@
                         <button
                             class="stats-toggle-btn"
                             class:active={isStatsOpen || hasAnyStats}
+                            class:open={isStatsOpen}
                             onclick={() => toggleStats(comp.id)}
                             title="class statistics"
-                        >📊</button>
+                            aria-label="toggle class statistics"
+                            aria-expanded={isStatsOpen}
+                        >
+                            <svg class="dropdown-icon" viewBox="0 0 16 16" aria-hidden="true">
+                                <path d="M4 6l4 4 4-4" />
+                            </svg>
+                        </button>
 
                         <!-- Remove -->
                         <button
@@ -451,6 +506,7 @@
                                         min="1"
                                         max={comp.subItems!.length}
                                         value={comp.bestOf}
+                                        disabled={!!comp.scaleTargetId}
                                         oninput={(e) =>
                                             handleBestOf(
                                                 comp.id,
@@ -462,6 +518,7 @@
                                     of {comp.subItems!.length}
                                     <button
                                         class="pill-btn mono"
+                                        disabled={!!comp.scaleTargetId}
                                         onclick={() =>
                                             grades.updateBestOf(
                                                 data.courseId,
@@ -473,6 +530,7 @@
                                     average of all {comp.subItems!.length}
                                     <button
                                         class="pill-btn mono"
+                                        disabled={!!comp.scaleTargetId}
                                         onclick={() =>
                                             grades.updateBestOf(
                                                 data.courseId,
@@ -495,15 +553,12 @@
                             </div>
 
                             {#each comp.subItems! as sub (sub.id)}
-                                {@const subPct =
-                                    sub.score !== null
-                                        ? (sub.score / sub.maxScore) * 100
-                                        : null}
+                                {@const subPct = computeEffectiveSubPct(course, sub)}
                                 {@const subColor = getGradeColor(subPct)}
                                 {@const isPerSub = comp.statsMode === 'per-sub'}
-                                {@const subPred = isPerSub ? getCompPrediction(subPct, sub) : null}
+                                {@const subPred = isPerSub && !sub.scaleTargetId ? getCompPrediction(subPct, sub) : null}
                                 {@const isSubStatsOpen = subStatsOpen.has(sub.id)}
-                                <div class="sub-row">
+                                <div class="sub-row" class:per-sub={isPerSub}>
                                     <div class="sub-name-cell">
                                         {#if editingSubName === sub.id}
                                             <input
@@ -542,39 +597,84 @@
                                     </div>
 
                                     <div class="sub-score-cell">
-                                        <input
-                                            class="num-input mono score-input"
-                                            type="number"
-                                            min="0"
-                                            max={sub.maxScore}
-                                            step="0.5"
-                                            placeholder="—"
-                                            value={sub.score ?? ""}
-                                            oninput={(e) =>
-                                                handleSubScore(
-                                                    comp.id,
-                                                    sub.id,
-                                                    (
-                                                        e.target as HTMLInputElement
-                                                    ).value,
-                                                )}
-                                        />
-                                        <span class="unit mono">/ </span>
-                                        <input
-                                            class="num-input mono max-input"
-                                            type="number"
-                                            min="1"
-                                            step="1"
-                                            value={sub.maxScore}
-                                            oninput={(e) =>
-                                                handleSubMax(
-                                                    comp.id,
-                                                    sub.id,
-                                                    (
-                                                        e.target as HTMLInputElement
-                                                    ).value,
-                                                )}
-                                        />
+                                        {#if sub.scaleTargetId}
+                                            <div class="scaled-score-control sub-scaled-control">
+                                                <label class="scaled-select-wrap mono">
+                                                    <span>scaled</span>
+                                                    <select
+                                                        class="scaled-select mono"
+                                                        value={sub.scaleTargetId}
+                                                        aria-label="change sub-item scale target"
+                                                        onchange={(e) => handleSubScaleTarget(comp.id, sub.id, (e.target as HTMLSelectElement).value)}
+                                                    >
+                                                        {#each course.components as target}
+                                                            {#if target.id !== comp.id}
+                                                                <option value={target.id}>{target.name}</option>
+                                                            {/if}
+                                                            {#each target.subItems ?? [] as targetSub}
+                                                                {#if targetSub.id !== sub.id}
+                                                                    <option value={targetSub.id}>↳ {target.name} / {targetSub.name}</option>
+                                                                {/if}
+                                                            {/each}
+                                                        {/each}
+                                                    </select>
+                                                    <span class="scaled-target-label">
+                                                        {#each course.components as target}
+                                                            {#if target.id === sub.scaleTargetId}
+                                                                {target.name}
+                                                            {/if}
+                                                            {#each target.subItems ?? [] as targetSub}
+                                                                {#if targetSub.id === sub.scaleTargetId}
+                                                                    ↳ {target.name} / {targetSub.name}
+                                                                {/if}
+                                                            {/each}
+                                                        {/each}
+                                                    </span>
+                                                </label>
+                                                <button
+                                                    class="scaled-clear-btn"
+                                                    title="turn off scaling"
+                                                    aria-label="turn off scaling"
+                                                    onclick={() => handleSubScaleTarget(comp.id, sub.id, "")}
+                                                >×</button>
+                                            </div>
+                                        {:else}
+                                            <input
+                                                class="num-input mono score-input"
+                                                type="number"
+                                                min="0"
+                                                max={sub.maxScore}
+                                                step="0.5"
+                                                placeholder="—"
+                                                disabled={!!comp.scaleTargetId}
+                                                value={sub.score ?? ""}
+                                                oninput={(e) =>
+                                                    handleSubScore(
+                                                        comp.id,
+                                                        sub.id,
+                                                        (
+                                                            e.target as HTMLInputElement
+                                                        ).value,
+                                                    )}
+                                            />
+                                            <span class="unit mono">/ </span>
+                                            <input
+                                                class="num-input mono max-input"
+                                                type="number"
+                                                min="1"
+                                                step="1"
+                                                disabled={!!comp.scaleTargetId}
+                                                value={sub.maxScore}
+                                                oninput={(e) =>
+                                                    handleSubMax(
+                                                        comp.id,
+                                                        sub.id,
+                                                        (
+                                                            e.target as HTMLInputElement
+                                                        ).value,
+                                                    )}
+                                            />
+                                        {/if}
                                     </div>
 
                                     <div class="sub-pct-cell">
@@ -602,16 +702,23 @@
                                                     {subPred.letter}
                                                     <span class="curve-pctl">P{subPred.percentile.toFixed(0)}</span>
                                                 </span>
-                                            {:else if sub.classAvg != null}
+                                            {:else if !sub.scaleTargetId && sub.classAvg != null}
                                                 <span class="curve-pill mono dimmed" style="border-color: oklch(1 0 0 / 8%)">—</span>
                                             {/if}
                                         </div>
                                         <button
                                             class="stats-toggle-btn sub-stats-btn"
-                                            class:active={isSubStatsOpen || sub.classAvg != null}
+                                            class:active={isSubStatsOpen || sub.classAvg != null || sub.scaleTargetId}
+                                            class:open={isSubStatsOpen}
                                             onclick={() => toggleSubStats(sub.id)}
                                             title="sub-item stats"
-                                        >📊</button>
+                                            aria-label="toggle sub-item statistics"
+                                            aria-expanded={isSubStatsOpen}
+                                        >
+                                            <svg class="dropdown-icon" viewBox="0 0 16 16" aria-hidden="true">
+                                                <path d="M4 6l4 4 4-4" />
+                                            </svg>
+                                        </button>
                                     {/if}
 
                                     <button
@@ -629,6 +736,29 @@
                                 <!-- Per-sub stats panel -->
                                 {#if isPerSub && isSubStatsOpen}
                                     <div class="sub-stats-panel">
+                                        <div class="sub-stats-toolbar">
+                                            <label class="scale-control mono sub-scale-control">
+                                                <span>scale</span>
+                                                <select
+                                                    class="scale-select mono"
+                                                    value={sub.scaleTargetId ?? ""}
+                                                    onchange={(e) => handleSubScaleTarget(comp.id, sub.id, (e.target as HTMLSelectElement).value)}
+                                                >
+                                                    <option value="">off</option>
+                                                    {#each course.components as target}
+                                                        {#if target.id !== comp.id}
+                                                            <option value={target.id}>{target.name}</option>
+                                                        {/if}
+                                                        {#each target.subItems ?? [] as targetSub}
+                                                            {#if targetSub.id !== sub.id}
+                                                                <option value={targetSub.id}>↳ {target.name} / {targetSub.name}</option>
+                                                            {/if}
+                                                        {/each}
+                                                    {/each}
+                                                </select>
+                                            </label>
+                                        </div>
+                                        {#if !sub.scaleTargetId}
                                         <div class="stats-inputs">
                                             <div class="stats-field">
                                                 <label class="stats-label mono">avg</label>
@@ -671,6 +801,9 @@
                                                 />
                                             </div>
                                         </div>
+                                        {:else}
+                                            <div class="stats-hint mono">marks and class statistics are scaled from the selected item</div>
+                                        {/if}
                                     </div>
                                 {/if}
                             {/each}
@@ -689,7 +822,7 @@
                     {#if isStatsOpen}
                         <div class="stats-panel">
                             <div class="stats-header mono">
-                                <span class="dimmed">📊 class statistics</span>
+                                <span class="dimmed">class statistics</span>
                                 <div class="stats-header-right">
                                     {#if hasSubItems}
                                         <div class="mode-toggle mono">
@@ -710,71 +843,97 @@
                                             predicted: {compPred.letter} (P{compPred.percentile.toFixed(1)})
                                         </span>
                                     {/if}
+                                    {#if comp.statsMode !== 'per-sub'}
+                                    <label class="scale-control mono">
+                                        <span>scale</span>
+                                        <select
+                                            class="scale-select mono"
+                                            value={comp.scaleTargetId ?? ""}
+                                            onchange={(e) => handleScaleTarget(comp.id, (e.target as HTMLSelectElement).value)}
+                                        >
+                                            <option value="">off</option>
+                                            {#each course.components as target}
+                                                {#if target.id !== comp.id}
+                                                    <option value={target.id}>{target.name}</option>
+                                                    {#each target.subItems ?? [] as sub}
+                                                        <option value={sub.id}>↳ {target.name} / {sub.name}</option>
+                                                    {/each}
+                                                {/if}
+                                            {/each}
+                                        </select>
+                                    </label>
+                                    {/if}
                                 </div>
                             </div>
                             {#if comp.statsMode !== 'per-sub'}
-                                <div class="stats-inputs">
-                                    <div class="stats-field">
-                                        <label class="stats-label mono">avg</label>
-                                        <input
-                                            class="num-input mono stats-input"
-                                            type="number"
-                                            min="0"
-                                            max={comp.maxScore}
-                                            step="0.5"
-                                            placeholder="class avg"
-                                            value={comp.classAvg ?? ""}
-                                            oninput={(e) => handleClassStat(comp.id, 'classAvg', (e.target as HTMLInputElement).value)}
-                                        />
+                                {#if !comp.scaleTargetId}
+                                    <div class="stats-inputs">
+                                        <div class="stats-field">
+                                            <label class="stats-label mono">avg</label>
+                                            <input
+                                                class="num-input mono stats-input"
+                                                type="number"
+                                                min="0"
+                                                max={comp.maxScore}
+                                                step="0.5"
+                                                placeholder="class avg"
+                                                value={comp.classAvg ?? ""}
+                                                oninput={(e) => handleClassStat(comp.id, 'classAvg', (e.target as HTMLInputElement).value)}
+                                            />
+                                        </div>
+                                        <div class="stats-field">
+                                            <label class="stats-label mono">median</label>
+                                            <input
+                                                class="num-input mono stats-input"
+                                                type="number"
+                                                min="0"
+                                                max={comp.maxScore}
+                                                step="0.5"
+                                                placeholder="optional"
+                                                value={comp.classMedian ?? ""}
+                                                oninput={(e) => handleClassStat(comp.id, 'classMedian', (e.target as HTMLInputElement).value)}
+                                            />
+                                        </div>
+                                        <div class="stats-field">
+                                            <label class="stats-label mono">max</label>
+                                            <input
+                                                class="num-input mono stats-input"
+                                                type="number"
+                                                min="0"
+                                                max={comp.maxScore}
+                                                step="0.5"
+                                                placeholder="optional"
+                                                value={comp.classMax ?? ""}
+                                                oninput={(e) => handleClassStat(comp.id, 'classMax', (e.target as HTMLInputElement).value)}
+                                            />
+                                        </div>
+                                        <div class="stats-field">
+                                            <label class="stats-label mono">σ</label>
+                                            <input
+                                                class="num-input mono stats-input"
+                                                type="number"
+                                                min="0"
+                                                step="0.5"
+                                                placeholder="auto"
+                                                value={comp.classStdDev ?? ""}
+                                                oninput={(e) => handleClassStat(comp.id, 'classStdDev', (e.target as HTMLInputElement).value)}
+                                            />
+                                        </div>
                                     </div>
-                                    <div class="stats-field">
-                                        <label class="stats-label mono">median</label>
-                                        <input
-                                            class="num-input mono stats-input"
-                                            type="number"
-                                            min="0"
-                                            max={comp.maxScore}
-                                            step="0.5"
-                                            placeholder="optional"
-                                            value={comp.classMedian ?? ""}
-                                            oninput={(e) => handleClassStat(comp.id, 'classMedian', (e.target as HTMLInputElement).value)}
-                                        />
-                                    </div>
-                                    <div class="stats-field">
-                                        <label class="stats-label mono">max</label>
-                                        <input
-                                            class="num-input mono stats-input"
-                                            type="number"
-                                            min="0"
-                                            max={comp.maxScore}
-                                            step="0.5"
-                                            placeholder="optional"
-                                            value={comp.classMax ?? ""}
-                                            oninput={(e) => handleClassStat(comp.id, 'classMax', (e.target as HTMLInputElement).value)}
-                                        />
-                                    </div>
-                                    <div class="stats-field">
-                                        <label class="stats-label mono">σ</label>
-                                        <input
-                                            class="num-input mono stats-input"
-                                            type="number"
-                                            min="0"
-                                            step="0.5"
-                                            placeholder="auto"
-                                            value={comp.classStdDev ?? ""}
-                                            oninput={(e) => handleClassStat(comp.id, 'classStdDev', (e.target as HTMLInputElement).value)}
-                                        />
-                                    </div>
-                                </div>
+                                {/if}
                                 <div class="stats-hint mono">
-                                    enter the class average to predict your grade on the curve
+                                    {#if comp.scaleTargetId}
+                                        marks are scaled from the selected component while scaling is active
+                                    {:else}
+                                        enter the class average to predict your grade on the curve
+                                    {/if}
                                     {#if !comp.classStdDev && comp.classAvg != null}
                                         · σ auto-estimated
                                     {/if}
                                 </div>
                             {:else}
                                 <div class="stats-hint mono">
-                                    use the 📊 button on each sub-item to enter individual stats
+                                    use the dropdown button on each sub-item to enter individual stats
                                 </div>
                             {/if}
                         </div>
@@ -1153,6 +1312,12 @@
     .num-input:focus {
         border-color: #22d3ee50;
     }
+    .num-input:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+        border-color: oklch(1 0 0 / 7%);
+        color: oklch(0.5 0.02 265);
+    }
     .num-input::-webkit-outer-spin-button,
     .num-input::-webkit-inner-spin-button {
         -webkit-appearance: none;
@@ -1188,6 +1353,88 @@
     .sub-summary:hover {
         border-color: oklch(1 0 0 / 18%);
         color: oklch(0.7 0.02 265);
+    }
+    .scaled-score-control {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.25rem;
+        width: 100%;
+    }
+    .sub-scaled-control {
+        justify-content: flex-end;
+    }
+    .scaled-select-wrap {
+        position: relative;
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.1rem;
+        min-width: 150px;
+        max-width: 220px;
+        min-height: 44px;
+        padding: 0.35rem 0.75rem;
+        background: oklch(1 0 0 / 4%);
+        border: 1px solid oklch(1 0 0 / 42%);
+        border-radius: 12px;
+        color: oklch(0.62 0.02 265);
+        cursor: pointer;
+        transition:
+            border-color 0.15s,
+            background 0.15s,
+            color 0.15s;
+    }
+    .scaled-select-wrap:hover {
+        background: oklch(1 0 0 / 7%);
+        border-color: oklch(1 0 0 / 65%);
+        color: oklch(0.82 0.01 265);
+    }
+    .scaled-select-wrap span {
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: oklch(0.82 0.01 265);
+        line-height: 1;
+    }
+    .scaled-select-wrap .scaled-target-label {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.78rem;
+        color: oklch(0.88 0.01 265);
+    }
+    .scaled-select {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        border: none;
+        outline: none;
+        cursor: pointer;
+    }
+    .scaled-clear-btn {
+        width: 22px;
+        height: 22px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        border: none;
+        border-radius: 4px;
+        color: oklch(0.36 0.02 265);
+        cursor: pointer;
+        font-size: 0.9rem;
+        line-height: 1;
+        transition:
+            background 0.15s,
+            color 0.15s;
+    }
+    .scaled-clear-btn:hover {
+        background: #f8717115;
+        color: #f87171;
     }
     .bar-stack {
         display: flex;
@@ -1258,33 +1505,59 @@
 
     /* Stats toggle button */
     .stats-toggle-btn {
-        background: none;
-        border: none;
-        font-size: 0.8rem;
+        width: 24px;
+        height: 24px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: oklch(1 0 0 / 3%);
+        border: 1px solid oklch(1 0 0 / 8%);
+        color: oklch(0.45 0.02 265);
         cursor: pointer;
-        padding: 0.1rem 0.2rem;
-        border-radius: 4px;
+        padding: 0;
+        border-radius: 6px;
         line-height: 1;
-        opacity: 0.25;
-        transition: all 0.15s;
-        filter: grayscale(100%);
+        opacity: 0.75;
+        transition:
+            background 0.15s,
+            border-color 0.15s,
+            color 0.15s,
+            opacity 0.15s;
     }
     .stats-toggle-btn:hover {
-        opacity: 0.7;
-        filter: grayscale(0%);
+        background: oklch(1 0 0 / 6%);
+        border-color: oklch(1 0 0 / 16%);
+        color: oklch(0.72 0.02 265);
+        opacity: 1;
     }
     .stats-toggle-btn.active {
-        opacity: 0.8;
-        filter: grayscale(0%);
+        background: #22d3ee12;
+        border-color: #22d3ee35;
+        color: #22d3ee;
+        opacity: 1;
+    }
+    .dropdown-icon {
+        width: 14px;
+        height: 14px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        transition: transform 0.18s ease;
+    }
+    .stats-toggle-btn.open .dropdown-icon {
+        transform: rotate(180deg);
     }
 
     /* Class stats panel */
     .stats-panel {
         border-top: 1px solid oklch(1 0 0 / 7%);
-        padding: 0.6rem 0.75rem 0.75rem 2.25rem;
+        padding: 0.6rem 18rem 0.75rem 2.25rem;
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
+        position: relative;
         background: oklch(0.09 0.025 265);
     }
     .stats-header {
@@ -1334,6 +1607,8 @@
         display: flex;
         align-items: center;
         gap: 0.75rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
     }
     .mode-toggle {
         display: flex;
@@ -1360,16 +1635,56 @@
     .mode-btn:hover:not(.active) {
         background: oklch(1 0 0 / 4%);
     }
+    .scale-control {
+        position: absolute;
+        top: 50%;
+        right: 1.1rem;
+        transform: translateY(-50%);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        color: oklch(0.45 0.02 265);
+        font-size: 0.58rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .scale-select {
+        max-width: 220px;
+        background: oklch(1 0 0 / 4%);
+        border: 1px solid oklch(1 0 0 / 12%);
+        border-radius: 6px;
+        padding: 0.28rem 1.5rem 0.28rem 0.5rem;
+        color: oklch(0.82 0.01 265);
+        font-size: 0.65rem;
+        outline: none;
+        cursor: pointer;
+        appearance: none;
+    }
+    .scale-select:focus {
+        border-color: #22d3ee45;
+        box-shadow: 0 0 0 1px #22d3ee20;
+    }
 
     /* Per-sub-item stats panel */
     .sub-stats-panel {
-        padding: 0.35rem 0.5rem 0.35rem 1.5rem;
+        position: relative;
+        padding: 0.35rem 18rem 0.35rem 1.5rem;
         background: oklch(0.085 0.02 265);
         border-top: 1px solid oklch(1 0 0 / 5%);
         border-bottom: 1px solid oklch(1 0 0 / 5%);
     }
     .sub-stats-panel .stats-inputs {
         gap: 0.5rem;
+    }
+    .sub-stats-toolbar {
+        display: flex;
+        justify-content: flex-end;
+    }
+    .sub-scale-control {
+        position: absolute;
+        top: 50%;
+        right: 0.75rem;
+        transform: translateY(-50%);
     }
     .sub-curve-cell {
         display: flex;
@@ -1432,6 +1747,10 @@
         background: oklch(1 0 0 / 12%);
         color: oklch(0.85 0.01 265);
     }
+    .pill-btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+    }
     .sub-row {
         display: grid;
         grid-template-columns: 1fr 200px 70px 28px;
@@ -1443,6 +1762,12 @@
     }
     .sub-row:hover {
         background: oklch(1 0 0 / 3%);
+    }
+    .sub-row.per-sub {
+        grid-template-columns: 1fr 280px 70px 56px 28px 28px;
+    }
+    .sub-row.per-sub > .remove-btn {
+        justify-self: center;
     }
     .sub-name-cell {
         overflow: hidden;
@@ -1615,6 +1940,14 @@
             padding-left: 1rem;
             padding-right: 0.5rem;
         }
+        .sub-stats-panel {
+            padding-left: 1rem;
+            padding-right: 0.5rem;
+        }
+        .scale-control {
+            position: static;
+            transform: none;
+        }
         .stats-inputs {
             flex-direction: column;
             gap: 0.4rem;
@@ -1630,11 +1963,19 @@
             gap: 0.2rem 0.4rem;
             padding: 0.35rem 0.25rem;
         }
+        .sub-row.per-sub {
+            grid-template-columns: 1fr auto 28px 28px;
+            grid-template-rows: auto auto auto;
+        }
 
         .sub-name-cell  { grid-column: 1; grid-row: 1; }
         .sub-pct-cell   { grid-column: 2; grid-row: 1; align-self: center; }
         .sub-row > .remove-btn { grid-column: 3; grid-row: 1; align-self: center; }
         .sub-score-cell { grid-column: 1 / 4; grid-row: 2; justify-content: flex-start; }
+        .sub-row.per-sub .sub-stats-btn { grid-column: 3; grid-row: 1; align-self: center; }
+        .sub-row.per-sub > .remove-btn { grid-column: 4; grid-row: 1; align-self: center; }
+        .sub-row.per-sub .sub-score-cell { grid-column: 1 / 5; }
+        .sub-row.per-sub .sub-curve-cell { grid-column: 1 / 5; grid-row: 3; justify-content: flex-start; }
 
         /* Totals */
         .totals {
