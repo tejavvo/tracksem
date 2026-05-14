@@ -9,6 +9,7 @@ A TUI-style grade tracker for sem 2 courses — ISS, CSO, IoT, LA, DSA. Enter sc
 - [SvelteKit](https://kit.svelte.dev) + Svelte 5 runes
 - [shadcn-svelte](https://shadcn-svelte.com) + Tailwind CSS v4
 - [Supabase](https://supabase.com) for persistence
+- [Cloudflare Workers](https://workers.cloudflare.com) for deployment
 - [Bun](https://bun.sh)
 
 ## dev
@@ -19,8 +20,6 @@ bun run dev
 ```
 
 → `http://localhost:5173`
-
-The SQLite database (`data/tracksem.db`) is auto-created and seeded on first run.
 
 ## features
 
