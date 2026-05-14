@@ -1,7 +1,66 @@
 import type { Course, Component, SubItem } from '$lib/types';
+import { predictGrade, percentileToGrade, getCurvedGradeColor } from '$lib/curveGrading';
 
 function generateId(): string {
     return crypto.randomUUID();
+}
+
+function getComponentPercentile(course: Course, comp: Component): number | null {
+    if (comp.statsMode === 'per-sub' && comp.subItems && comp.subItems.length > 0) {
+        const subPreds: number[] = [];
+        for (const sub of comp.subItems) {
+            if (sub.scaleTargetId) {
+                const targetPercentile = getScaleTargetPercentile(course, sub.scaleTargetId);
+                if (targetPercentile !== null) subPreds.push(targetPercentile);
+                continue;
+            }
+
+            if (sub.score === null || sub.classAvg == null) continue;
+            const pred = predictGrade(sub.score, sub.maxScore, sub.classAvg, {
+                median: sub.classMedian,
+                max: sub.classMax,
+                stdDev: sub.classStdDev,
+            });
+            subPreds.push(pred.percentile);
+        }
+
+        if (subPreds.length === 0) return null;
+        return subPreds.reduce((a, b) => a + b, 0) / subPreds.length;
+    }
+
+    const pct = computeEffectiveCompPct(course, comp);
+    if (pct === null || comp.classAvg == null) return null;
+
+    const score = (pct / 100) * comp.maxScore;
+    const pred = predictGrade(score, comp.maxScore, comp.classAvg, {
+        median: comp.classMedian,
+        max: comp.classMax,
+        stdDev: comp.classStdDev,
+    });
+
+    return pred.percentile;
+}
+
+function getScaleTargetPercentile(course: Course, targetId: string | null | undefined): number | null {
+    if (!targetId) return null;
+
+    for (const comp of course.components) {
+        if (comp.id === targetId) return getComponentPercentile(course, comp);
+
+        const sub = comp.subItems?.find((item) => item.id === targetId);
+        if (sub) {
+            if (sub.scaleTargetId) return getScaleTargetPercentile(course, sub.scaleTargetId);
+            if (sub.score === null || sub.classAvg == null) return null;
+            const pred = predictGrade(sub.score, sub.maxScore, sub.classAvg, {
+                median: sub.classMedian,
+                max: sub.classMax,
+                stdDev: sub.classStdDev,
+            });
+            return pred.percentile;
+        }
+    }
+
+    return null;
 }
 
 /**
@@ -31,6 +90,59 @@ export function computeCompPct(comp: Component): number | null {
 
     if (comp.score === null) return null;
     return (comp.score / comp.maxScore) * 100;
+}
+
+export function computeSubPct(sub: SubItem): number | null {
+    if (sub.score === null) return null;
+    return (sub.score / sub.maxScore) * 100;
+}
+
+export function computeEffectiveSubPct(course: Course, sub: SubItem): number | null {
+    return sub.scaleTargetId ? getScaleTargetPct(course, sub.scaleTargetId) : computeSubPct(sub);
+}
+
+export function computeEffectiveCompPct(course: Course, comp: Component): number | null {
+    if (comp.scaleTargetId) return getScaleTargetPct(course, comp.scaleTargetId);
+
+    if (comp.subItems && comp.subItems.length > 0) {
+        const filled = comp.subItems
+            .map((sub) => computeEffectiveSubPct(course, sub))
+            .filter((pct): pct is number => pct !== null);
+
+        if (filled.length === 0) return null;
+
+        if (comp.bestOf && comp.bestOf < filled.length) {
+            const top = filled.sort((a, b) => b - a).slice(0, comp.bestOf);
+            return top.reduce((a, b) => a + b, 0) / top.length;
+        }
+
+        return filled.reduce((sum, pct) => sum + pct, 0) / filled.length;
+    }
+
+    return computeCompPct(comp);
+}
+
+export function getScaleTargetPct(course: Course, targetId: string | null | undefined): number | null {
+    if (!targetId) return null;
+
+    for (const comp of course.components) {
+        if (comp.id === targetId) return computeEffectiveCompPct(course, comp);
+
+        const sub = comp.subItems?.find((item) => item.id === targetId);
+        if (sub) return computeEffectiveSubPct(course, sub);
+    }
+
+    return null;
+}
+
+export function effectiveComponentWeight(course: Course, componentId: string): number {
+    const comp = course.components.find((item) => item.id === componentId);
+    if (!comp || comp.scaleTargetId) return 0;
+
+    return course.components.reduce(
+        (sum, item) => sum + (item.scaleTargetId === componentId ? item.weight : 0),
+        comp.weight
+    );
 }
 
 /** Fire-and-forget API helper */
@@ -97,7 +209,7 @@ class GradesStore {
 
     updateScore(courseId: string, componentId: string, score: number | null): void {
         const comp = this.#getComp(courseId, componentId);
-        if (!comp) return;
+        if (!comp || comp.scaleTargetId) return;
         comp.score = score;
         api('/api/components', 'PATCH', { id: componentId, field: 'score', value: score });
     }
@@ -105,15 +217,19 @@ class GradesStore {
     // ─── Sub-item scores ────────────────────────────────────────────────────────
 
     updateSubScore(courseId: string, componentId: string, subItemId: string, score: number | null): void {
+        const comp = this.#getComp(courseId, componentId);
+        if (comp?.scaleTargetId) return;
         const sub = this.#getSub(courseId, componentId, subItemId);
-        if (!sub) return;
+        if (!sub || sub.scaleTargetId) return;
         sub.score = score;
         api('/api/sub-items', 'PATCH', { id: subItemId, field: 'score', value: score });
     }
 
     updateSubMaxScore(courseId: string, componentId: string, subItemId: string, maxScore: number): void {
+        const comp = this.#getComp(courseId, componentId);
+        if (comp?.scaleTargetId) return;
         const sub = this.#getSub(courseId, componentId, subItemId);
-        if (!sub) return;
+        if (!sub || sub.scaleTargetId) return;
         sub.maxScore = maxScore;
         api('/api/sub-items', 'PATCH', { id: subItemId, field: 'maxScore', value: maxScore });
     }
@@ -165,7 +281,7 @@ class GradesStore {
 
     updateMaxScore(courseId: string, componentId: string, maxScore: number): void {
         const comp = this.#getComp(courseId, componentId);
-        if (!comp) return;
+        if (!comp || comp.scaleTargetId) return;
         comp.maxScore = maxScore;
         api('/api/components', 'PATCH', { id: componentId, field: 'maxScore', value: maxScore });
     }
@@ -198,6 +314,43 @@ class GradesStore {
         await this.reload();
     }
 
+    // ─── Class stats ────────────────────────────────────────────────────────────
+
+    updateClassStats(courseId: string, componentId: string, field: 'classAvg' | 'classMedian' | 'classMax' | 'classStdDev', value: number | null): void {
+        const comp = this.#getComp(courseId, componentId);
+        if (!comp || comp.scaleTargetId) return;
+        comp[field] = value;
+        api('/api/components', 'PATCH', { id: componentId, field, value });
+    }
+
+    updateStatsMode(courseId: string, componentId: string, mode: 'global' | 'per-sub'): void {
+        const comp = this.#getComp(courseId, componentId);
+        if (!comp) return;
+        comp.statsMode = mode;
+        api('/api/components', 'PATCH', { id: componentId, field: 'statsMode', value: mode });
+    }
+
+    updateScaleTarget(courseId: string, componentId: string, targetId: string | null): void {
+        const comp = this.#getComp(courseId, componentId);
+        if (!comp) return;
+        comp.scaleTargetId = targetId;
+        api('/api/components', 'PATCH', { id: componentId, field: 'scaleTargetId', value: targetId });
+    }
+
+    updateSubClassStats(courseId: string, componentId: string, subItemId: string, field: 'classAvg' | 'classMedian' | 'classMax' | 'classStdDev', value: number | null): void {
+        const sub = this.#getSub(courseId, componentId, subItemId);
+        if (!sub || sub.scaleTargetId) return;
+        sub[field] = value;
+        api('/api/sub-items', 'PATCH', { id: subItemId, field, value });
+    }
+
+    updateSubScaleTarget(courseId: string, componentId: string, subItemId: string, targetId: string | null): void {
+        const sub = this.#getSub(courseId, componentId, subItemId);
+        if (!sub) return;
+        sub.scaleTargetId = targetId;
+        api('/api/sub-items', 'PATCH', { id: subItemId, field: 'scaleTargetId', value: targetId });
+    }
+
     // ─── Derived computations ───────────────────────────────────────────────────
 
     projectedGrade(courseId: string): { grade: number | null; filled: number; total: number } {
@@ -209,7 +362,7 @@ class GradesStore {
         let filled = 0;
 
         for (const comp of course.components) {
-            const pct = computeCompPct(comp);
+            const pct = computeEffectiveCompPct(course, comp);
             if (pct !== null) {
                 weightedSum += pct * (comp.weight / 100);
                 filledWeight += comp.weight;
@@ -225,13 +378,50 @@ class GradesStore {
     componentPct(courseId: string, componentId: string): number | null {
         const comp = this.#getComp(courseId, componentId);
         if (!comp) return null;
-        return computeCompPct(comp);
+        const course = this.courses.find((c) => c.id === courseId);
+        if (!course) return null;
+        return computeEffectiveCompPct(course, comp);
     }
 
     totalWeight(courseId: string): number {
         const course = this.courses.find((c) => c.id === courseId);
         if (!course) return 0;
         return course.components.reduce((sum, c) => sum + c.weight, 0);
+    }
+
+    /** Compute an overall curved grade across components that have both a score AND class stats */
+    curvedGrade(courseId: string): { letter: string; color: string; percentile: number } | null {
+        const course = this.courses.find((c) => c.id === courseId);
+        if (!course) return null;
+
+        let weightedPercentile = 0;
+        let filledWeight = 0;
+
+        for (const comp of course.components) {
+            if (comp.scaleTargetId) {
+                const targetPercentile = getScaleTargetPercentile(course, comp.scaleTargetId);
+                if (targetPercentile === null) continue;
+
+                weightedPercentile += targetPercentile * (comp.weight / 100);
+                filledWeight += comp.weight;
+                continue;
+            }
+
+            const percentile = getComponentPercentile(course, comp);
+            if (percentile === null) continue;
+
+            weightedPercentile += percentile * (comp.weight / 100);
+            filledWeight += comp.weight;
+        }
+
+        if (filledWeight === 0) return null;
+
+        const overallPercentile = (weightedPercentile / filledWeight) * 100;
+
+        const letter = percentileToGrade(overallPercentile);
+        const color = getCurvedGradeColor(letter);
+
+        return { letter, color, percentile: overallPercentile };
     }
 
     // ─── Private helpers ────────────────────────────────────────────────────────
