@@ -1,482 +1,620 @@
-import { mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import Database from 'better-sqlite3';
-import { DEFAULT_COURSES, SEM_DATA } from '$lib/data/courses';
-import type { Course, Component, SubItem } from '$lib/types';
+import { DEFAULT_COURSES, SEM_DATA } from "$lib/data/courses";
+import type { Course, Component, SubItem } from "$lib/types";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-type CourseRow = {
-	id: string;
-	name: string;
-	full_name: string;
-	color: string;
-};
+// ── Seeding ───────────────────────────────────────────────────────────────────
 
-type ComponentRow = {
-	id: string;
-	course_id: string;
-	name: string;
-	weight: number;
-	max_score: number;
-	score: number | null;
-	best_of: number | null;
-	sort_order: number;
-	stats_mode: 'global' | 'per-sub' | null;
-	scale_target_id: string | null;
-	class_avg: number | null;
-	class_median: number | null;
-	class_max: number | null;
-	class_std_dev: number | null;
-};
+export async function seedByBranch(
+  supabase: SupabaseClient,
+  userId: string,
+  selectedCourses: Course[],
+): Promise<Course[]> {
+  const results: Course[] = [];
+  for (const selectedCourse of selectedCourses) {
+    // Check if DEFAULT_COURSES has a matching entry by id — it will have
+    // the real component breakdown (weights, sub-items, best-of, etc.)
+    const defaultMatch = DEFAULT_COURSES.find((d) => d.id === selectedCourse.id);
 
-type SubItemRow = {
-	id: string;
-	component_id: string;
-	name: string;
-	score: number | null;
-	max_score: number;
-	sort_order: number;
-	class_avg: number | null;
-	class_median: number | null;
-	class_max: number | null;
-	class_std_dev: number | null;
-	scale_target_id: string | null;
-};
-
-const dbPath = resolve(process.cwd(), 'data', 'tracksem.db');
-mkdirSync(dirname(dbPath), { recursive: true });
-
-const db = new Database(dbPath);
-db.pragma('foreign_keys = ON');
-db.pragma('journal_mode = WAL');
-
-db.exec(`
-	CREATE TABLE IF NOT EXISTS courses (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		full_name TEXT NOT NULL,
-		color TEXT NOT NULL
-	);
-
-	CREATE TABLE IF NOT EXISTS components (
-		id TEXT PRIMARY KEY,
-		course_id TEXT NOT NULL,
-		name TEXT NOT NULL,
-		weight REAL NOT NULL,
-		max_score REAL NOT NULL,
-		score REAL,
-		best_of INTEGER,
-		sort_order INTEGER NOT NULL,
-		stats_mode TEXT DEFAULT 'global',
-		class_avg REAL,
-		class_median REAL,
-		class_max REAL,
-		class_std_dev REAL,
-		FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
-	);
-
-	CREATE TABLE IF NOT EXISTS sub_items (
-		id TEXT PRIMARY KEY,
-		component_id TEXT NOT NULL,
-		name TEXT NOT NULL,
-		score REAL,
-		max_score REAL NOT NULL,
-		sort_order INTEGER NOT NULL,
-		class_avg REAL,
-		class_median REAL,
-		class_max REAL,
-		class_std_dev REAL,
-		scale_target_id TEXT,
-		FOREIGN KEY (component_id) REFERENCES components(id) ON DELETE CASCADE
-	);
-`);
-
-const componentColumns = db.prepare('PRAGMA table_info(components)').all() as { name: string }[];
-if (!componentColumns.some((column) => column.name === 'scale_target_id')) {
-	db.prepare('ALTER TABLE components ADD COLUMN scale_target_id TEXT').run();
+    if (defaultMatch && defaultMatch.components.length > 0) {
+      // Merge: use the catalog name/fullName/color but the default components
+      const merged: Course = {
+        ...defaultMatch,
+        name: selectedCourse.name,
+        fullName: selectedCourse.fullName,
+        color: selectedCourse.color,
+      };
+      const course = await addCourseWithComponents(supabase, userId, merged);
+      results.push(course);
+    } else if (selectedCourse.components.length > 0) {
+      const course = await addCourseWithComponents(
+        supabase,
+        userId,
+        selectedCourse,
+      );
+      results.push(course);
+    } else {
+      // No detailed components known — fall back to generic Quiz/Midsem/Endsem
+      const course = await addCourseWithDefaults(
+        supabase,
+        userId,
+        selectedCourse.name,
+        selectedCourse.fullName,
+        selectedCourse.color,
+      );
+      results.push(course);
+    }
+  }
+  return results;
 }
 
-const subItemColumns = db.prepare('PRAGMA table_info(sub_items)').all() as { name: string }[];
-if (!subItemColumns.some((column) => column.name === 'scale_target_id')) {
-	db.prepare('ALTER TABLE sub_items ADD COLUMN scale_target_id TEXT').run();
+// ── Shared fetch helper ────────────────────────────────────────────────────────
+
+async function fetchAllCourses(supabase: SupabaseClient): Promise<Course[]> {
+  const { data: courseRows, error: courseErr } = await supabase
+    .from("courses")
+    .select("id, name, full_name, color");
+
+  if (courseErr) throw courseErr;
+  if (!courseRows || courseRows.length === 0) return [];
+
+  const courseIds = courseRows.map((c) => c.id);
+
+  const { data: compRows, error: compErr } = await supabase
+    .from("components")
+    .select(
+      "id, course_id, name, weight, max_score, score, best_of, sort_order",
+    )
+    .in("course_id", courseIds)
+    .order("sort_order", { ascending: true });
+
+  if (compErr) throw compErr;
+
+  const compIds = (compRows ?? []).map((c) => c.id);
+  let subRows: {
+    id: string;
+    component_id: string;
+    name: string;
+    score: number | null;
+    max_score: number;
+    sort_order: number;
+  }[] = [];
+
+  if (compIds.length > 0) {
+    const { data, error: subErr } = await supabase
+      .from("sub_items")
+      .select("id, component_id, name, score, max_score, sort_order")
+      .in("component_id", compIds)
+      .order("sort_order", { ascending: true });
+
+    if (subErr) throw subErr;
+    subRows = data ?? [];
+  }
+
+  // Build lookup maps
+  const subsByComp = new Map<string, SubItem[]>();
+  for (const s of subRows) {
+    if (!subsByComp.has(s.component_id)) subsByComp.set(s.component_id, []);
+    subsByComp.get(s.component_id)!.push({
+      id: s.id,
+      name: s.name,
+      score: s.score,
+      maxScore: s.max_score,
+    });
+  }
+
+  const compsByCourse = new Map<string, Component[]>();
+  for (const c of compRows ?? []) {
+    if (!compsByCourse.has(c.course_id)) compsByCourse.set(c.course_id, []);
+    const subs = subsByComp.get(c.id);
+    compsByCourse.get(c.course_id)!.push({
+      id: c.id,
+      name: c.name,
+      weight: c.weight,
+      maxScore: c.max_score,
+      score: c.score,
+      subItems: subs && subs.length > 0 ? subs : undefined,
+      bestOf: c.best_of ?? undefined,
+    });
+  }
+
+  return courseRows.map((cr) => ({
+    id: cr.id,
+    name: cr.name,
+    fullName: cr.full_name,
+    color: cr.color,
+    components: compsByCourse.get(cr.id) ?? [],
+  }));
 }
 
-function fetchAllCourses(): Course[] {
-	const courseRows = db
-		.prepare('SELECT id, name, full_name, color FROM courses ORDER BY rowid ASC')
-		.all() as CourseRow[];
+// ── Public query ───────────────────────────────────────────────────────────────
 
-	if (courseRows.length === 0) return [];
+/** Get all courses for the authenticated user, seeding defaults on first login. */
+export async function getAllCourses(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<Course[]> {
+  const { count, error: countErr } = await supabase
+    .from("courses")
+    .select("*", { count: "exact", head: true });
 
-	const componentRows = db
-		.prepare(
-			`SELECT id, course_id, name, weight, max_score, score, best_of, sort_order, stats_mode, scale_target_id,
-			 class_avg, class_median, class_max, class_std_dev
-			 FROM components
-			 ORDER BY course_id, sort_order ASC`
-		)
-		.all() as ComponentRow[];
+  if (countErr) throw countErr;
 
-	const subRows = db
-		.prepare(
-			`SELECT id, component_id, name, score, max_score, sort_order,
-			 class_avg, class_median, class_max, class_std_dev, scale_target_id
-			 FROM sub_items
-			 ORDER BY component_id, sort_order ASC`
-		)
-		.all() as SubItemRow[];
+  if (count === 0) {
+    return [];
+    // return seedDefaultCourses(supabase, userId);
+  }
 
-	const subsByComp = new Map<string, SubItem[]>();
-	for (const row of subRows) {
-		const subItem: SubItem = {
-			id: row.id,
-			name: row.name,
-			score: row.score,
-			maxScore: row.max_score,
-			classAvg: row.class_avg,
-			classMedian: row.class_median,
-			classMax: row.class_max,
-			classStdDev: row.class_std_dev,
-			scaleTargetId: row.scale_target_id
-		};
-
-		const current = subsByComp.get(row.component_id) ?? [];
-		current.push(subItem);
-		subsByComp.set(row.component_id, current);
-	}
-
-	const compsByCourse = new Map<string, Component[]>();
-	for (const row of componentRows) {
-		const component: Component = {
-			id: row.id,
-			name: row.name,
-			weight: row.weight,
-			maxScore: row.max_score,
-			score: row.score,
-			bestOf: row.best_of ?? undefined,
-			statsMode: row.stats_mode === 'per-sub' ? 'per-sub' : 'global',
-			scaleTargetId: row.scale_target_id,
-			classAvg: row.class_avg,
-			classMedian: row.class_median,
-			classMax: row.class_max,
-			classStdDev: row.class_std_dev,
-			subItems: subsByComp.get(row.id)
-		};
-
-		if (!component.subItems?.length) {
-			delete component.subItems;
-		}
-
-		const current = compsByCourse.get(row.course_id) ?? [];
-		current.push(component);
-		compsByCourse.set(row.course_id, current);
-	}
-
-	return courseRows.map((course) => ({
-		id: course.id,
-		name: course.name,
-		fullName: course.full_name,
-		color: course.color,
-		components: compsByCourse.get(course.id) ?? []
-	}));
+  return fetchAllCourses(supabase);
 }
 
-function insertCourse(courseId: string, course: Pick<Course, 'name' | 'fullName' | 'color'>): void {
-	db.prepare('INSERT INTO courses (id, name, full_name, color) VALUES (?, ?, ?, ?)').run(
-		courseId,
-		course.name,
-		course.fullName,
-		course.color
-	);
-}
-
-function insertComponents(courseId: string, components: Component[]): Component[] {
-	const insertComponentStmt = db.prepare(
-		`INSERT INTO components (
-			id, course_id, name, weight, max_score, score, best_of, sort_order,
-			stats_mode, scale_target_id, class_avg, class_median, class_max, class_std_dev
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	);
-	const insertSubItemStmt = db.prepare(
-		`INSERT INTO sub_items (
-			id, component_id, name, score, max_score, sort_order,
-			class_avg, class_median, class_max, class_std_dev, scale_target_id
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	);
-
-	return components.map((component, compIdx) => {
-		const componentId = crypto.randomUUID();
-		insertComponentStmt.run(
-			componentId,
-			courseId,
-			component.name,
-			component.weight,
-			component.maxScore,
-			component.score ?? null,
-			component.bestOf ?? null,
-			compIdx,
-			component.statsMode ?? 'global',
-			component.scaleTargetId ?? null,
-			component.classAvg ?? null,
-			component.classMedian ?? null,
-			component.classMax ?? null,
-			component.classStdDev ?? null
-		);
-
-		const subItems = component.subItems?.map((subItem, subIdx) => {
-			const subItemId = crypto.randomUUID();
-			insertSubItemStmt.run(
-				subItemId,
-				componentId,
-				subItem.name,
-				subItem.score ?? null,
-				subItem.maxScore,
-				subIdx,
-				subItem.classAvg ?? null,
-				subItem.classMedian ?? null,
-				subItem.classMax ?? null,
-				subItem.classStdDev ?? null,
-				subItem.scaleTargetId ?? null
-			);
-
-			return {
-				id: subItemId,
-				name: subItem.name,
-				score: subItem.score ?? null,
-				maxScore: subItem.maxScore,
-				classAvg: subItem.classAvg ?? null,
-				classMedian: subItem.classMedian ?? null,
-				classMax: subItem.classMax ?? null,
-				classStdDev: subItem.classStdDev ?? null,
-				scaleTargetId: subItem.scaleTargetId ?? null
-			};
-		});
-
-		return {
-			id: componentId,
-			name: component.name,
-			weight: component.weight,
-			maxScore: component.maxScore,
-			score: component.score ?? null,
-			bestOf: component.bestOf,
-			statsMode: component.statsMode ?? 'global',
-			scaleTargetId: component.scaleTargetId ?? null,
-			classAvg: component.classAvg ?? null,
-			classMedian: component.classMedian ?? null,
-			classMax: component.classMax ?? null,
-			classStdDev: component.classStdDev ?? null,
-			subItems: subItems?.length ? subItems : undefined
-		};
-	});
-}
-
-const createCourseFromTemplate = db.transaction((template: Course) => {
-	const courseId = crypto.randomUUID();
-	insertCourse(courseId, template);
-	const components = insertComponents(courseId, template.components);
-
-	return {
-		id: courseId,
-		name: template.name,
-		fullName: template.fullName,
-		color: template.color,
-		components
-	};
-});
-
-export async function seedByBranch(selectedCourses: Course[]): Promise<Course[]> {
-	const seeded: Course[] = [];
-
-	for (const selectedCourse of selectedCourses) {
-		const defaultMatch = DEFAULT_COURSES.find((course) => course.id === selectedCourse.id);
-
-		if (defaultMatch && defaultMatch.components.length > 0) {
-			seeded.push(
-				createCourseFromTemplate({
-					...defaultMatch,
-					name: selectedCourse.name,
-					fullName: selectedCourse.fullName,
-					color: selectedCourse.color
-				})
-			);
-			continue;
-		}
-
-		if (selectedCourse.components.length > 0) {
-			seeded.push(createCourseFromTemplate(selectedCourse));
-			continue;
-		}
-
-		seeded.push(
-			await addCourseWithDefaults(selectedCourse.name, selectedCourse.fullName, selectedCourse.color)
-		);
-	}
-
-	return seeded;
-}
-
-export async function getAllCourses(): Promise<Course[]> {
-	return fetchAllCourses();
-}
-
+/** Add a new course with default components (Quiz x2, Midsem, Endsem). */
 export async function addCourseWithDefaults(
-	name: string,
-	fullName: string,
-	color: string
+  supabase: SupabaseClient,
+  userId: string,
+  name: string,
+  fullName: string,
+  color: string,
 ): Promise<Course> {
-	return createCourseFromTemplate({
-		id: crypto.randomUUID(),
-		name,
-		fullName,
-		color,
-		components: [
-			{
-				id: crypto.randomUUID(),
-				name: 'Quiz',
-				weight: 0,
-				maxScore: 100,
-				score: null,
-				subItems: [
-					{ id: crypto.randomUUID(), name: 'Quiz 1', score: null, maxScore: 100 },
-					{ id: crypto.randomUUID(), name: 'Quiz 2', score: null, maxScore: 100 }
-				]
-			},
-			{
-				id: crypto.randomUUID(),
-				name: 'Midsem',
-				weight: 0,
-				maxScore: 100,
-				score: null
-			},
-			{
-				id: crypto.randomUUID(),
-				name: 'Endsem',
-				weight: 0,
-				maxScore: 100,
-				score: null
-			}
-		]
-	});
+  const courseId = crypto.randomUUID();
+
+  const { error: courseErr } = await supabase.from("courses").insert({
+    id: courseId,
+    user_id: userId,
+    name,
+    full_name: fullName,
+    color,
+  });
+  if (courseErr) throw courseErr;
+
+  const componentInserts: {
+    id: string;
+    course_id: string;
+    name: string;
+    weight: number;
+    max_score: number;
+    score: number | null;
+    best_of: number | null;
+    sort_order: number;
+  }[] = [];
+
+  const subItemInserts: {
+    id: string;
+    component_id: string;
+    name: string;
+    score: number | null;
+    max_score: number;
+    sort_order: number;
+  }[] = [];
+
+  const defaults = [
+    { name: "Quiz", subItems: ["Quiz 1", "Quiz 2"] },
+    { name: "Midsem" },
+    { name: "Endsem" },
+  ] as const;
+
+  const createdComponents: Component[] = [];
+
+  defaults.forEach((def, compIdx) => {
+    const compId = crypto.randomUUID();
+
+    componentInserts.push({
+      id: compId,
+      course_id: courseId,
+      name: def.name,
+      weight: 0,
+      max_score: 100,
+      score: null,
+      best_of: null,
+      sort_order: compIdx,
+    });
+
+    const subItems: SubItem[] = [];
+    if ("subItems" in def && def.subItems) {
+      def.subItems.forEach((subName, si) => {
+        const subId = crypto.randomUUID();
+        subItemInserts.push({
+          id: subId,
+          component_id: compId,
+          name: subName,
+          score: null,
+          max_score: 100,
+          sort_order: si,
+        });
+        subItems.push({
+          id: subId,
+          name: subName,
+          score: null,
+          maxScore: 100,
+        });
+      });
+    }
+
+    createdComponents.push({
+      id: compId,
+      name: def.name,
+      weight: 0,
+      maxScore: 100,
+      score: null,
+      subItems: subItems.length > 0 ? subItems : undefined,
+    });
+  });
+
+  if (componentInserts.length > 0) {
+    const { error } = await supabase
+      .from("components")
+      .insert(componentInserts);
+    if (error) throw error;
+  }
+
+  if (subItemInserts.length > 0) {
+    const { error } = await supabase.from("sub_items").insert(subItemInserts);
+    if (error) throw error;
+  }
+
+  return {
+    id: courseId,
+    name,
+    fullName,
+    color,
+    components: createdComponents,
+  };
 }
 
-export async function addCourseWithComponents(template: Course): Promise<Course> {
-	return createCourseFromTemplate(template);
+export async function addCourseWithComponents(
+  supabase: SupabaseClient,
+  userId: string,
+  template: Course,
+): Promise<Course> {
+  const courseId = crypto.randomUUID();
+
+  const { error: courseErr } = await supabase.from("courses").insert({
+    id: courseId,
+    user_id: userId,
+    name: template.name,
+    full_name: template.fullName,
+    color: template.color,
+  });
+  if (courseErr) throw courseErr;
+
+  const componentInserts: {
+    id: string;
+    course_id: string;
+    name: string;
+    weight: number;
+    max_score: number;
+    score: number | null;
+    best_of: number | null;
+    sort_order: number;
+  }[] = [];
+
+  const subItemInserts: {
+    id: string;
+    component_id: string;
+    name: string;
+    score: number | null;
+    max_score: number;
+    sort_order: number;
+  }[] = [];
+
+  const createdComponents: Component[] = [];
+
+  for (let i = 0; i < template.components.length; i++) {
+    const comp = template.components[i];
+    const compId = crypto.randomUUID();
+
+    componentInserts.push({
+      id: compId,
+      course_id: courseId,
+      name: comp.name,
+      weight: comp.weight,
+      max_score: comp.maxScore,
+      score: comp.score ?? null,
+      best_of: comp.bestOf ?? null,
+      sort_order: i,
+    });
+
+    const createdSubItems: SubItem[] = [];
+    if (comp.subItems) {
+      comp.subItems.forEach((sub, si) => {
+        const subId = crypto.randomUUID();
+        subItemInserts.push({
+          id: subId,
+          component_id: compId,
+          name: sub.name,
+          score: sub.score ?? null,
+          max_score: sub.maxScore,
+          sort_order: si,
+        });
+        createdSubItems.push({
+          id: subId,
+          name: sub.name,
+          score: sub.score ?? null,
+          maxScore: sub.maxScore,
+        });
+      });
+    }
+
+    createdComponents.push({
+      id: compId,
+      name: comp.name,
+      weight: comp.weight,
+      maxScore: comp.maxScore,
+      score: comp.score ?? null,
+      subItems: createdSubItems.length > 0 ? createdSubItems : undefined,
+      bestOf: comp.bestOf,
+    });
+  }
+
+  if (componentInserts.length > 0) {
+    const { error } = await supabase
+      .from("components")
+      .insert(componentInserts);
+    if (error) throw error;
+  }
+
+  if (subItemInserts.length > 0) {
+    const { error } = await supabase.from("sub_items").insert(subItemInserts);
+    if (error) throw error;
+  }
+
+  return {
+    id: courseId,
+    name: template.name,
+    fullName: template.fullName,
+    color: template.color,
+    components: createdComponents,
+  };
+}
+/** Delete a course and its components/sub-items. */
+export async function deleteCourse(
+  supabase: SupabaseClient,
+  userId: string,
+  courseId: string,
+): Promise<void> {
+  const { data: comps, error: compErr } = await supabase
+    .from("components")
+    .select("id")
+    .eq("course_id", courseId);
+
+  if (compErr) throw compErr;
+
+  const compIds = (comps ?? []).map((c) => c.id);
+  if (compIds.length > 0) {
+    const { error: subErr } = await supabase
+      .from("sub_items")
+      .delete()
+      .in("component_id", compIds);
+    if (subErr) throw subErr;
+  }
+
+  const { error: delCompErr } = await supabase
+    .from("components")
+    .delete()
+    .eq("course_id", courseId);
+  if (delCompErr) throw delCompErr;
+
+  const { error: courseErr } = await supabase
+    .from("courses")
+    .delete()
+    .eq("id", courseId)
+    .eq("user_id", userId);
+  if (courseErr) throw courseErr;
 }
 
-export async function deleteCourse(courseId: string): Promise<void> {
-	db.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
-}
+// ── Component mutations ────────────────────────────────────────────────────────
 
 const COMP_COL_MAP: Record<string, string> = {
-	score: 'score',
-	weight: 'weight',
-	maxScore: 'max_score',
-	name: 'name',
-	bestOf: 'best_of',
-	statsMode: 'stats_mode',
-	scaleTargetId: 'scale_target_id',
-	classAvg: 'class_avg',
-	classMedian: 'class_median',
-	classMax: 'class_max',
-	classStdDev: 'class_std_dev'
+  score: "score",
+  weight: "weight",
+  maxScore: "max_score",
+  name: "name",
+  bestOf: "best_of",
 };
 
-export async function updateComponentField(id: string, field: string, value: unknown): Promise<void> {
-	const column = COMP_COL_MAP[field];
-	if (!column) return;
-
-	db.prepare(`UPDATE components SET ${column} = ? WHERE id = ?`).run(value ?? null, id);
+export async function updateComponentField(
+  supabase: SupabaseClient,
+  id: string,
+  field: string,
+  value: unknown,
+): Promise<void> {
+  const col = COMP_COL_MAP[field];
+  if (!col) return;
+  const { error } = await supabase
+    .from("components")
+    .update({ [col]: value ?? null })
+    .eq("id", id);
+  if (error) throw error;
 }
 
-export async function addComponent(courseId: string, id: string, name: string): Promise<void> {
-	const row = db
-		.prepare('SELECT sort_order FROM components WHERE course_id = ? ORDER BY sort_order DESC LIMIT 1')
-		.get(courseId) as { sort_order: number } | undefined;
-	const nextOrder = row ? row.sort_order + 1 : 0;
+export async function addComponent(
+  supabase: SupabaseClient,
+  courseId: string,
+  id: string,
+  name: string,
+): Promise<void> {
+  const { data } = await supabase
+    .from("components")
+    .select("sort_order")
+    .eq("course_id", courseId)
+    .order("sort_order", { ascending: false })
+    .limit(1);
 
-	db.prepare(
-		`INSERT INTO components (
-			id, course_id, name, weight, max_score, score, best_of, sort_order,
-			stats_mode, scale_target_id, class_avg, class_median, class_max, class_std_dev
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	).run(id, courseId, name, 0, 100, null, null, nextOrder, 'global', null, null, null, null, null);
+  const nextOrder = data && data.length > 0 ? data[0].sort_order + 1 : 0;
+
+  const { error } = await supabase.from("components").insert({
+    id,
+    course_id: courseId,
+    name,
+    weight: 0,
+    max_score: 100,
+    score: null,
+    best_of: null,
+    sort_order: nextOrder,
+  });
+  if (error) throw error;
 }
 
-export async function deleteComponent(id: string): Promise<void> {
-	db.prepare('DELETE FROM components WHERE id = ?').run(id);
+export async function deleteComponent(
+  supabase: SupabaseClient,
+  id: string,
+): Promise<void> {
+  const { error } = await supabase.from("components").delete().eq("id", id);
+  if (error) throw error;
 }
+
+// ── Sub-item mutations ─────────────────────────────────────────────────────────
 
 const SUB_COL_MAP: Record<string, string> = {
-	score: 'score',
-	maxScore: 'max_score',
-	name: 'name',
-	classAvg: 'class_avg',
-	classMedian: 'class_median',
-	classMax: 'class_max',
-	classStdDev: 'class_std_dev'
+  score: "score",
+  maxScore: "max_score",
+  name: "name",
 };
 
-export async function updateSubItemField(id: string, field: string, value: unknown): Promise<void> {
-	const column = SUB_COL_MAP[field];
-	if (!column) return;
-
-	db.prepare(`UPDATE sub_items SET ${column} = ? WHERE id = ?`).run(value ?? null, id);
+export async function updateSubItemField(
+  supabase: SupabaseClient,
+  id: string,
+  field: string,
+  value: unknown,
+): Promise<void> {
+  const col = SUB_COL_MAP[field];
+  if (!col) return;
+  const { error } = await supabase
+    .from("sub_items")
+    .update({ [col]: value ?? null })
+    .eq("id", id);
+  if (error) throw error;
 }
 
 export async function addSubItem(
-	componentId: string,
-	id: string,
-	name: string,
-	maxScore: number
+  supabase: SupabaseClient,
+  componentId: string,
+  id: string,
+  name: string,
+  maxScore: number,
 ): Promise<void> {
-	const row = db
-		.prepare('SELECT sort_order FROM sub_items WHERE component_id = ? ORDER BY sort_order DESC LIMIT 1')
-		.get(componentId) as { sort_order: number } | undefined;
-	const nextOrder = row ? row.sort_order + 1 : 0;
+  const { data } = await supabase
+    .from("sub_items")
+    .select("sort_order")
+    .eq("component_id", componentId)
+    .order("sort_order", { ascending: false })
+    .limit(1);
 
-	db.prepare(
-		`INSERT INTO sub_items (
-			id, component_id, name, score, max_score, sort_order,
-			class_avg, class_median, class_max, class_std_dev, scale_target_id
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	).run(id, componentId, name, null, maxScore, nextOrder, null, null, null, null, null);
+  const nextOrder = data && data.length > 0 ? data[0].sort_order + 1 : 0;
+
+  const { error } = await supabase.from("sub_items").insert({
+    id,
+    component_id: componentId,
+    name,
+    score: null,
+    max_score: maxScore,
+    sort_order: nextOrder,
+  });
+  if (error) throw error;
 }
 
-export async function deleteSubItem(id: string): Promise<void> {
-	db.prepare('DELETE FROM sub_items WHERE id = ?').run(id);
+export async function deleteSubItem(
+  supabase: SupabaseClient,
+  id: string,
+): Promise<void> {
+  const { error } = await supabase.from("sub_items").delete().eq("id", id);
+  if (error) throw error;
 }
 
-export async function getSubItemCount(componentId: string): Promise<number> {
-	const row = db
-		.prepare('SELECT COUNT(*) as count FROM sub_items WHERE component_id = ?')
-		.get(componentId) as { count: number };
-
-	return row.count;
+export async function getSubItemCount(
+  supabase: SupabaseClient,
+  componentId: string,
+): Promise<number> {
+  const { count } = await supabase
+    .from("sub_items")
+    .select("*", { count: "exact", head: true })
+    .eq("component_id", componentId);
+  return count ?? 0;
 }
 
-const resetCourseTx = db.transaction((courseId: string, original: Course) => {
-	db.prepare('DELETE FROM components WHERE course_id = ?').run(courseId);
-	insertComponents(courseId, original.components);
-});
+// ── Course reset ───────────────────────────────────────────────────────────────
 
-export async function resetCourse(courseId: string): Promise<void> {
-	const row = db.prepare('SELECT name FROM courses WHERE id = ?').get(courseId) as { name: string } | undefined;
-	if (!row) return;
+export async function resetCourse(
+  supabase: SupabaseClient,
+  courseId: string,
+): Promise<void> {
+  const { data: course } = await supabase
+    .from("courses")
+    .select("name")
+    .eq("id", courseId)
+    .single();
 
-	let original = DEFAULT_COURSES.find((course) => course.name === row.name);
-	if (!original) {
-		for (const branch of Object.values(SEM_DATA)) {
-			for (const courses of Object.values(branch)) {
-				const match = courses.find((course) => course.name === row.name);
-				if (match) {
-					original = match;
-					break;
-				}
-			}
+  if (!course) return;
 
-			if (original) break;
-		}
-	}
+  let original = DEFAULT_COURSES.find((c) => c.name === course.name);
+  if (!original) {
+    for (const branch of Object.values(SEM_DATA)) {
+      for (const courses of Object.values(branch)) {
+        const match = courses.find((c) => c.name === course.name);
+        if (match) {
+          original = match;
+          break;
+        }
+      }
+      if (original) break;
+    }
+  }
+  if (!original) return;
 
-	if (!original) return;
-	resetCourseTx(courseId, original);
+  // Delete all components (cascades to sub_items via FK)
+  await supabase.from("components").delete().eq("course_id", courseId);
+
+  const componentInserts: {
+    id: string;
+    course_id: string;
+    name: string;
+    weight: number;
+    max_score: number;
+    score: number | null;
+    best_of: number | null;
+    sort_order: number;
+  }[] = [];
+
+  const subItemInserts: {
+    id: string;
+    component_id: string;
+    name: string;
+    score: number | null;
+    max_score: number;
+    sort_order: number;
+  }[] = [];
+
+  for (let compIdx = 0; compIdx < original.components.length; compIdx++) {
+    const comp = original.components[compIdx];
+    const dbCompId = crypto.randomUUID();
+
+    componentInserts.push({
+      id: dbCompId,
+      course_id: courseId,
+      name: comp.name,
+      weight: comp.weight,
+      max_score: comp.maxScore,
+      score: comp.score ?? null,
+      best_of: comp.bestOf ?? null,
+      sort_order: compIdx,
+    });
+
+    if (comp.subItems) {
+      comp.subItems.forEach((sub, si) => {
+        subItemInserts.push({
+          id: crypto.randomUUID(),
+          component_id: dbCompId,
+          name: sub.name,
+          score: sub.score ?? null,
+          max_score: sub.maxScore,
+          sort_order: si,
+        });
+      });
+    }
+  }
+
+  if (componentInserts.length > 0)
+    await supabase.from("components").insert(componentInserts);
+  if (subItemInserts.length > 0)
+    await supabase.from("sub_items").insert(subItemInserts);
 }
+
