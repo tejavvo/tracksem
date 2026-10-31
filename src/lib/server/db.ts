@@ -62,7 +62,7 @@ async function fetchAllCourses(supabase: SupabaseClient): Promise<Course[]> {
   const { data: compRows, error: compErr } = await supabase
     .from("components")
     .select(
-      "id, course_id, name, weight, max_score, score, best_of, sort_order",
+      "id, course_id, name, weight, max_score, score, best_of, sort_order, stats_mode, scale_target_id, class_avg, class_median, class_max, class_std_dev",
     )
     .in("course_id", courseIds)
     .order("sort_order", { ascending: true });
@@ -77,12 +77,19 @@ async function fetchAllCourses(supabase: SupabaseClient): Promise<Course[]> {
     score: number | null;
     max_score: number;
     sort_order: number;
+    class_avg: number | null;
+    class_median: number | null;
+    class_max: number | null;
+    class_std_dev: number | null;
+    scale_target_id: string | null;
   }[] = [];
 
   if (compIds.length > 0) {
     const { data, error: subErr } = await supabase
       .from("sub_items")
-      .select("id, component_id, name, score, max_score, sort_order")
+      .select(
+        "id, component_id, name, score, max_score, sort_order, class_avg, class_median, class_max, class_std_dev, scale_target_id",
+      )
       .in("component_id", compIds)
       .order("sort_order", { ascending: true });
 
@@ -99,6 +106,11 @@ async function fetchAllCourses(supabase: SupabaseClient): Promise<Course[]> {
       name: s.name,
       score: s.score,
       maxScore: s.max_score,
+      classAvg: s.class_avg,
+      classMedian: s.class_median,
+      classMax: s.class_max,
+      classStdDev: s.class_std_dev,
+      scaleTargetId: s.scale_target_id,
     });
   }
 
@@ -114,6 +126,12 @@ async function fetchAllCourses(supabase: SupabaseClient): Promise<Course[]> {
       score: c.score,
       subItems: subs && subs.length > 0 ? subs : undefined,
       bestOf: c.best_of ?? undefined,
+      statsMode: c.stats_mode === "per-sub" ? "per-sub" : "global",
+      scaleTargetId: c.scale_target_id,
+      classAvg: c.class_avg,
+      classMedian: c.class_median,
+      classMax: c.class_max,
+      classStdDev: c.class_std_dev,
     });
   }
 
@@ -401,6 +419,13 @@ export async function deleteCourse(
   if (courseErr) throw courseErr;
 }
 
+/** Thrown when a PATCH names a field that has no database column. */
+export class UnknownFieldError extends Error {
+  constructor(field: string) {
+    super(`Unknown field: ${field}`);
+  }
+}
+
 // ── Component mutations ────────────────────────────────────────────────────────
 
 const COMP_COL_MAP: Record<string, string> = {
@@ -409,6 +434,12 @@ const COMP_COL_MAP: Record<string, string> = {
   maxScore: "max_score",
   name: "name",
   bestOf: "best_of",
+  statsMode: "stats_mode",
+  scaleTargetId: "scale_target_id",
+  classAvg: "class_avg",
+  classMedian: "class_median",
+  classMax: "class_max",
+  classStdDev: "class_std_dev",
 };
 
 export async function updateComponentField(
@@ -418,7 +449,7 @@ export async function updateComponentField(
   value: unknown,
 ): Promise<void> {
   const col = COMP_COL_MAP[field];
-  if (!col) return;
+  if (!col) throw new UnknownFieldError(field);
   const { error } = await supabase
     .from("components")
     .update({ [col]: value ?? null })
@@ -468,6 +499,11 @@ const SUB_COL_MAP: Record<string, string> = {
   score: "score",
   maxScore: "max_score",
   name: "name",
+  scaleTargetId: "scale_target_id",
+  classAvg: "class_avg",
+  classMedian: "class_median",
+  classMax: "class_max",
+  classStdDev: "class_std_dev",
 };
 
 export async function updateSubItemField(
@@ -477,7 +513,7 @@ export async function updateSubItemField(
   value: unknown,
 ): Promise<void> {
   const col = SUB_COL_MAP[field];
-  if (!col) return;
+  if (!col) throw new UnknownFieldError(field);
   const { error } = await supabase
     .from("sub_items")
     .update({ [col]: value ?? null })
