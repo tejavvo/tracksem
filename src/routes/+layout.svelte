@@ -7,6 +7,9 @@
 	import { onMount } from "svelte";
 	import { browser } from "$app/environment";
 	import { page } from "$app/state";
+	import { Toaster } from "$lib/components/ui/sonner";
+	import { Spinner } from "$lib/components/ui/spinner";
+	import * as Tooltip from "$lib/components/ui/tooltip";
 
 	let { children, data } = $props();
 
@@ -56,25 +59,17 @@
 	/>
 </svelte:head>
 
-<!-- Auth page renders immediately without the loading gate -->
-{#if data.user === null}
-	{@render children()}
-{:else if grades.loaded}
-	{@render children()}
-{:else}
-	<div class="loading">
-		<span class="mono">loading…</span>
-	</div>
-{/if}
+<Toaster theme="dark" />
 
-<style>
-	.loading {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		min-height: 100vh;
-		color: oklch(0.5 0.02 265);
-		font-family: "JetBrains Mono", monospace;
-		font-size: 0.8rem;
-	}
-</style>
+<!-- Auth page renders immediately without the loading gate -->
+<Tooltip.Provider>
+	{#if data.user === null}
+		{@render children()}
+	{:else if grades.loaded}
+		{@render children()}
+	{:else}
+		<div class="flex min-h-svh items-center justify-center">
+			<Spinner />
+		</div>
+	{/if}
+</Tooltip.Provider>

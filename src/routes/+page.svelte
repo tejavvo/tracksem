@@ -6,6 +6,23 @@
     import { createBrowserClient } from "@supabase/ssr";
     import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from "$env/static/public";
     import { goto } from "$app/navigation";
+    import * as Card from "$lib/components/ui/card";
+    import * as Field from "$lib/components/ui/field";
+    import * as Select from "$lib/components/ui/select";
+    import * as ToggleGroup from "$lib/components/ui/toggle-group";
+    import * as InputGroup from "$lib/components/ui/input-group";
+    import * as Item from "$lib/components/ui/item";
+    import * as Dialog from "$lib/components/ui/dialog";
+    import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+    import * as Avatar from "$lib/components/ui/avatar";
+    import * as Empty from "$lib/components/ui/empty";
+    import { Button } from "$lib/components/ui/button";
+    import { Input } from "$lib/components/ui/input";
+    import { Badge } from "$lib/components/ui/badge";
+    import { Spinner } from "$lib/components/ui/spinner";
+    import PlusIcon from "@lucide/svelte/icons/plus";
+    import RefreshCwIcon from "@lucide/svelte/icons/refresh-cw";
+    import LogOutIcon from "@lucide/svelte/icons/log-out";
 
     const supabase = createBrowserClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY);
 
@@ -29,15 +46,6 @@
     }
 
     const overall = $derived(getOverallGrade());
-
-    function gradeColor(g: number | null): string {
-        if (g === null) return "#6b7280";
-        if (g >= 90) return "#4ade80";
-        if (g >= 80) return "#86efac";
-        if (g >= 65) return "#fbbf24";
-        if (g >= 50) return "#fb923c";
-        return "#f87171";
-    }
 
     const courseColors = [
         "#22d3ee",
@@ -72,7 +80,13 @@
         newCourseColor = pickRandomColor();
     }
 
-    async function handleAddCourse() {
+    function onAddOpenChange(open: boolean) {
+        if (open) openAddCourse();
+        else closeAddCourse();
+    }
+
+    async function handleAddCourse(e?: Event) {
+        e?.preventDefault();
         const name = newCourseName.trim();
         if (!name || creatingCourse) return;
         const fullName = newCourseFullName.trim() || name;
@@ -120,822 +134,235 @@
     }
 </script>
 
-<div class="page">
-    <!-- Header -->
-    <header class="header">
-        <div class="header-inner">
-            <div class="brand">
-                <div class="brand-icon mono">&gt;_</div>
-                <div>
-                    <div class="brand-title mono">tracksem</div>
-                    <div class="brand-sub">
-                        sem 2 · {new Date().getFullYear()}
-                    </div>
-                </div>
+<div class="flex min-h-svh flex-col">
+    <header class="bg-background/80 sticky top-0 z-10 border-b backdrop-blur">
+        <div class="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
+            <div class="flex flex-col">
+                <span class="font-mono font-semibold">tracksem</span>
+                <span class="text-muted-foreground text-xs">sem 2 · {new Date().getFullYear()}</span>
             </div>
 
-            <div class="header-right">
+            <div class="flex items-center gap-3">
                 {#if overall.grade !== null}
-                    <div
-                        class="overall-pill"
-                        style="border-color: {gradeColor(overall.grade)}40; color: {gradeColor(overall.grade)}"
-                    >
-                        <span class="mono text-sm">avg {overall.grade.toFixed(1)}%</span>
-                        <span class="mono text-xs" style="opacity: 0.6">
-                            across {overall.count} course{overall.count > 1 ? "s" : ""}
-                        </span>
-                    </div>
+                    <Badge variant="secondary" class="font-mono">
+                        avg {overall.grade.toFixed(1)}% · {overall.count} course{overall.count > 1 ? "s" : ""}
+                    </Badge>
                 {/if}
 
-                <div class="user-group">
-                    <span class="user-email mono">{page.data.user?.email}</span>
-                    <button class="logout-btn mono" onclick={logout}>sign_out</button>
-                </div>
+                <DropdownMenu.Root>
+                    <DropdownMenu.Trigger>
+                        {#snippet child({ props })}
+                            <Button {...props} variant="ghost" size="icon" class="rounded-full" aria-label="Account">
+                                <Avatar.Root>
+                                    <Avatar.Fallback>
+                                        {(page.data.user?.email ?? "?").slice(0, 1).toUpperCase()}
+                                    </Avatar.Fallback>
+                                </Avatar.Root>
+                            </Button>
+                        {/snippet}
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content align="end">
+                        <DropdownMenu.Group>
+                            <DropdownMenu.Label class="truncate">{page.data.user?.email}</DropdownMenu.Label>
+                        </DropdownMenu.Group>
+                        <DropdownMenu.Separator />
+                        <DropdownMenu.Group>
+                            <DropdownMenu.Item onSelect={logout}>
+                                <LogOutIcon />
+                                Sign out
+                            </DropdownMenu.Item>
+                        </DropdownMenu.Group>
+                    </DropdownMenu.Content>
+                </DropdownMenu.Root>
             </div>
         </div>
     </header>
 
-    <!-- Course grid -->
-    <main class="main">
+    <main class="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8">
         {#if grades.courses.length === 0}
-            <!-- Onboarding -->
-            <div class="onboard-wrap">
-                <div class="onboard-card">
-                    <div class="onboard-header mono">// setup</div>
-                    <div class="onboard-sub">
-                        select your branch and semester to get started
-                    </div>
+            <Card.Root class="mx-auto w-full max-w-lg">
+                <Card.Header>
+                    <Card.Title>Setup</Card.Title>
+                    <Card.Description>Select your branch and semester to get started.</Card.Description>
+                </Card.Header>
+                <Card.Content>
+                    <Field.FieldGroup>
+                        <Field.FieldSet>
+                            <Field.FieldLegend variant="label">Encryption key</Field.FieldLegend>
+                            <ToggleGroup.Root
+                                type="single"
+                                variant="outline"
+                                value={useCustomKey ? "custom" : "default"}
+                                onValueChange={(v) => { if (v) useCustomKey = v === "custom"; }}
+                            >
+                                <ToggleGroup.Item value="default">Default</ToggleGroup.Item>
+                                <ToggleGroup.Item value="custom">Custom</ToggleGroup.Item>
+                            </ToggleGroup.Root>
+                            {#if !useCustomKey}
+                                <Field.Field>
+                                    <InputGroup.Root>
+                                        <InputGroup.Input class="font-mono" value={defaultKey} readonly aria-label="Generated key" />
+                                        <InputGroup.Addon align="inline-end">
+                                            <InputGroup.Button
+                                                size="icon-xs"
+                                                aria-label="Regenerate key"
+                                                onclick={() => { defaultKey = generateKey(); }}
+                                            >
+                                                <RefreshCwIcon />
+                                            </InputGroup.Button>
+                                        </InputGroup.Addon>
+                                    </InputGroup.Root>
+                                    <Field.FieldDescription>
+                                        A random key has been generated for you. Your data is encrypted before leaving your device.
+                                    </Field.FieldDescription>
+                                </Field.Field>
+                            {:else}
+                                <Field.Field>
+                                    <Input
+                                        class="font-mono"
+                                        placeholder="Enter your own key (min 8 chars)"
+                                        bind:value={customKey}
+                                        spellcheck="false"
+                                        autocomplete="off"
+                                        aria-label="Custom key"
+                                    />
+                                    <Field.FieldDescription>
+                                        Use your own passphrase. Only you can decrypt your data.
+                                    </Field.FieldDescription>
+                                </Field.Field>
+                            {/if}
+                        </Field.FieldSet>
 
-                    <!-- Encryption key -->
-                    <div class="enc-block">
-                        <div class="enc-label-row">
-                            <span class="enc-label mono">// encryption key</span>
-                            <div class="enc-toggle">
-                                <button
-                                    class="enc-tab mono"
-                                    class:active={!useCustomKey}
-                                    onclick={() => { useCustomKey = false; }}
-                                >default</button>
-                                <button
-                                    class="enc-tab mono"
-                                    class:active={useCustomKey}
-                                    onclick={() => { useCustomKey = true; }}
-                                >custom</button>
-                            </div>
-                        </div>
+                        <Field.Field>
+                            <Field.FieldLabel>Branch</Field.FieldLabel>
+                            <Select.Root
+                                type="single"
+                                bind:value={selectedBranch}
+                                onValueChange={() => { selectedSemester = ""; }}
+                            >
+                                <Select.Trigger class="w-full">
+                                    {selectedBranch || "Select branch"}
+                                </Select.Trigger>
+                                <Select.Content>
+                                    <Select.Group>
+                                        {#each BRANCHES as branch (branch)}
+                                            <Select.Item value={branch}>{branch}</Select.Item>
+                                        {/each}
+                                    </Select.Group>
+                                </Select.Content>
+                            </Select.Root>
+                        </Field.Field>
 
-                        {#if !useCustomKey}
-                            <div class="enc-key-row">
-                                <span class="enc-key mono">{defaultKey}</span>
-                                <button
-                                    class="enc-regen mono"
-                                    title="regenerate"
-                                    onclick={() => { defaultKey = generateKey(); }}
-                                >↺</button>
-                            </div>
-                            <div class="enc-hint mono">
-                                a random key has been generated for you — your data is encrypted before leaving your device
-                            </div>
-                        {:else}
-                            <input
-                                class="enc-input mono"
-                                type="text"
-                                placeholder="enter your own key (min 8 chars)"
-                                bind:value={customKey}
-                                spellcheck="false"
-                                autocomplete="off"
-                            />
-                            <div class="enc-hint mono">
-                                use your own passphrase — only you can decrypt your data
-                            </div>
+                        {#if selectedBranch}
+                            <Field.Field>
+                                <Field.FieldLabel>Semester</Field.FieldLabel>
+                                <Select.Root type="single" bind:value={selectedSemester}>
+                                    <Select.Trigger class="w-full">
+                                        {selectedSemester || "Select semester"}
+                                    </Select.Trigger>
+                                    <Select.Content>
+                                        <Select.Group>
+                                            {#each availableSemesters as sem (sem)}
+                                                <Select.Item value={sem}>{sem}</Select.Item>
+                                            {/each}
+                                        </Select.Group>
+                                    </Select.Content>
+                                </Select.Root>
+                            </Field.Field>
                         {/if}
-                    </div>
 
-                    <select
-                        class="onboard-select mono"
-                        bind:value={selectedBranch}
-                        onchange={() => { selectedSemester = ""; }}
-                    >
-                        <option value="">select branch</option>
-                        {#each BRANCHES as branch}
-                            <option value={branch}>{branch}</option>
-                        {/each}
-                    </select>
-
-                    {#if selectedBranch}
-                        <select
-                            class="onboard-select mono"
-                            bind:value={selectedSemester}
-                        >
-                            <option value="">select semester</option>
-                            {#each availableSemesters as sem}
-                                <option value={sem}>{sem}</option>
-                            {/each}
-                        </select>
-                    {/if}
-
-                    {#if previewCourses.length > 0}
-                        <div class="onboard-preview">
-                            <div class="onboard-preview-label mono">// courses to add</div>
-                            {#each previewCourses as c}
-                                <div class="onboard-preview-item">
-                                    <span
-                                        class="onboard-dot"
-                                        style="background: {c.color}"
-                                    ></span>
-                                    <span class="mono">{c.name}</span>
-                                    <span class="onboard-full">{c.fullName}</span>
-                                    {#if c.components.length > 0}
-                                        <span class="onboard-comp-count mono">
-                                            {c.components.length} components
-                                        </span>
-                                    {:else}
-                                        <span class="onboard-comp-count mono">defaults</span>
-                                    {/if}
-                                </div>
-                            {/each}
-                        </div>
-
-                        <button
-                            class="onboard-btn mono"
-                            disabled={seeding}
-                            onclick={handleSeed}
-                        >
-                            {seeding ? "setting up..." : "confirm"}
-                        </button>
-                    {/if}
-                </div>
-            </div>
+                        {#if previewCourses.length > 0}
+                            <Field.FieldSet>
+                                <Field.FieldLegend variant="label">Courses to add</Field.FieldLegend>
+                                <Item.Group class="gap-2">
+                                    {#each previewCourses as c (c.name)}
+                                        <Item.Root variant="outline" size="sm">
+                                            <Item.Content>
+                                                <Item.Title class="font-mono">{c.name}</Item.Title>
+                                                <Item.Description>{c.fullName}</Item.Description>
+                                            </Item.Content>
+                                            <Item.Actions>
+                                                <Badge variant="secondary">
+                                                    {c.components.length > 0 ? `${c.components.length} components` : "defaults"}
+                                                </Badge>
+                                            </Item.Actions>
+                                        </Item.Root>
+                                    {/each}
+                                </Item.Group>
+                            </Field.FieldSet>
+                        {/if}
+                    </Field.FieldGroup>
+                </Card.Content>
+                {#if previewCourses.length > 0}
+                    <Card.Footer>
+                        <Button class="w-full" disabled={seeding} onclick={handleSeed}>
+                            {#if seeding}
+                                <Spinner data-icon="inline-start" />
+                                Setting up…
+                            {:else}
+                                Confirm
+                            {/if}
+                        </Button>
+                    </Card.Footer>
+                {/if}
+            </Card.Root>
         {:else}
-            <div class="section-label mono">// courses</div>
-            <div class="grid">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {#each grades.courses as course (course.id)}
                     <CourseCard {course} />
                 {/each}
 
-                <div class="add-card" style="--accent: {newCourseColor}">
-                    <button class="add-card-closed mono" onclick={openAddCourse}>
-                        + add course
-                    </button>
-                </div>
+                <Empty.Root class="border border-dashed">
+                    <Empty.Header>
+                        <Empty.Title>Add a course</Empty.Title>
+                        <Empty.Description>Defaults: Quiz ×2 · Midsem · Endsem</Empty.Description>
+                    </Empty.Header>
+                    <Empty.Content>
+                        <Button variant="outline" onclick={openAddCourse}>
+                            <PlusIcon data-icon="inline-start" />
+                            Add course
+                        </Button>
+                    </Empty.Content>
+                </Empty.Root>
             </div>
-        {/if}
 
-        {#if addOpen}
-            <button
-                class="modal-backdrop"
-                type="button"
-                onclick={closeAddCourse}
-                aria-label="Close add course dialog"
-            ></button>
-            <div class="modal" role="dialog" aria-modal="true" aria-labelledby="add-course-title">
-                <div class="modal-card" style="--accent: {newCourseColor}">
-                    <div class="modal-header">
-                        <div id="add-course-title" class="add-title mono">+ add course</div>
-                        <button
-                            class="modal-close mono"
-                            disabled={creatingCourse}
-                            onclick={closeAddCourse}
-                            aria-label="close"
-                        >
-                            ×
-                        </button>
-                    </div>
-                    <input
-                        class="add-input mono"
-                        placeholder="Short name (e.g. DSA)"
-                        bind:value={newCourseName}
-                    />
-                    <input
-                        class="add-input mono"
-                        placeholder="Full name"
-                        bind:value={newCourseFullName}
-                    />
-                    <div class="add-row">
-                        <button
-                            class="add-btn mono"
-                            disabled={creatingCourse || newCourseName.trim().length === 0}
-                            onclick={handleAddCourse}
-                        >
-                            {creatingCourse ? "adding..." : "create"}
-                        </button>
-                        <button
-                            class="add-cancel mono"
-                            disabled={creatingCourse}
-                            onclick={closeAddCourse}
-                        >
-                            cancel
-                        </button>
-                    </div>
-                    <div class="add-hint mono text-xs">
-                        defaults: Quiz x2 · Midsem · Endsem
-                    </div>
-                </div>
-            </div>
+            <p class="text-muted-foreground text-center text-sm">
+                Click a course to enter scores and manage components.
+            </p>
         {/if}
-
-        <div class="hint mono">
-            click a course to enter scores &amp; manage components
-        </div>
     </main>
 </div>
 
-<style>
-    .page {
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-    }
-
-    .header {
-        border-bottom: 1px solid oklch(1 0 0 / 7%);
-        padding: 1.25rem 2rem;
-        position: sticky;
-        top: 0;
-        background: oklch(0.08 0.02 265 / 90%);
-        backdrop-filter: blur(12px);
-        z-index: 50;
-    }
-
-    .header-inner {
-        max-width: 1200px;
-        margin: 0 auto;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 1rem;
-    }
-
-    .brand {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        flex-shrink: 0;
-    }
-
-    .brand-icon {
-        font-size: 1.5rem;
-        color: #22d3ee;
-        line-height: 1;
-    }
-
-    .brand-title {
-        font-size: 1.1rem;
-        font-weight: 700;
-        color: oklch(0.95 0.01 265);
-        letter-spacing: -0.02em;
-    }
-
-    .brand-sub {
-        font-size: 0.7rem;
-        color: oklch(0.5 0.02 265);
-        margin-top: 1px;
-    }
-
-    .header-right {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        min-width: 0;
-    }
-
-    .overall-pill {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        border: 1px solid;
-        border-radius: 20px;
-        padding: 0.4rem 0.85rem;
-        background: oklch(1 0 0 / 4%);
-        flex-shrink: 0;
-    }
-
-    .user-group {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        min-width: 0;
-        padding-left: 0.75rem;
-        border-left: 1px solid oklch(1 0 0 / 8%);
-    }
-
-    .user-email {
-        font-size: 0.68rem;
-        color: oklch(0.38 0.02 265);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        max-width: 180px;
-    }
-
-    .logout-btn {
-        font-size: 0.68rem;
-        background: none;
-        border: 1px solid oklch(1 0 0 / 8%);
-        border-radius: 4px;
-        color: oklch(0.4 0.02 265);
-        padding: 0.22rem 0.55rem;
-        cursor: pointer;
-        transition: all 0.15s ease;
-        white-space: nowrap;
-        flex-shrink: 0;
-    }
-
-    .logout-btn:hover {
-        color: #f87171;
-        border-color: #f8717133;
-        background: #f8717110;
-    }
-
-    .main {
-        flex: 1;
-        max-width: 1200px;
-        width: 100%;
-        margin: 0 auto;
-        padding: 2rem;
-    }
-
-    .section-label {
-        font-size: 0.7rem;
-        color: oklch(0.4 0.02 265);
-        letter-spacing: 0.05em;
-        margin-bottom: 1rem;
-    }
-
-    .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-        gap: 1rem;
-    }
-
-    .add-card {
-        border: 1px dotted oklch(1 0 0 / 12%);
-        border-radius: 10px;
-        padding: 1.25rem;
-        min-height: 220px;
-        background: oklch(0.12 0.02 265 / 40%);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        position: relative;
-    }
-
-    .add-card-closed {
-        width: 100%;
-        height: 100%;
-        min-height: 140px;
-        border: none;
-        background: transparent;
-        color: oklch(0.6 0.02 265);
-        font-size: 0.8rem;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        cursor: pointer;
-    }
-
-    .add-card-closed:hover {
-        color: oklch(0.9 0.01 265);
-    }
-
-    .modal-backdrop {
-        position: fixed;
-        inset: 0;
-        background: oklch(0 0 0 / 45%);
-        backdrop-filter: blur(4px);
-        border: none;
-        padding: 0;
-        margin: 0;
-        cursor: pointer;
-        z-index: 100;
-    }
-
-    .modal {
-        position: fixed;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 110;
-        padding: 2rem;
-    }
-
-    .modal-card {
-        width: min(560px, 92vw);
-        background: oklch(0.12 0.02 265);
-        border: 1px solid oklch(1 0 0 / 12%);
-        border-radius: 12px;
-        padding: 1.5rem;
-        display: flex;
-        flex-direction: column;
-        gap: 0.8rem;
-        box-shadow: 0 20px 60px oklch(0 0 0 / 40%);
-    }
-
-    .modal-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-    }
-
-    .modal-close {
-        font-size: 0.9rem;
-        background: none;
-        border: 1px solid oklch(1 0 0 / 12%);
-        border-radius: 6px;
-        color: oklch(0.6 0.02 265);
-        padding: 0.25rem 0.5rem;
-        cursor: pointer;
-        transition: all 0.15s ease;
-    }
-
-    .modal-close:hover:enabled {
-        color: oklch(0.9 0.01 265);
-        border-color: oklch(1 0 0 / 18%);
-        background: oklch(1 0 0 / 6%);
-    }
-
-    .modal-close:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-
-    .add-title {
-        font-size: 0.75rem;
-        letter-spacing: 0.08em;
-        color: oklch(0.6 0.02 265);
-        text-transform: uppercase;
-    }
-
-    .add-input {
-        background: oklch(1 0 0 / 4%);
-        border: 1px solid oklch(1 0 0 / 10%);
-        border-radius: 6px;
-        padding: 0.45rem 0.6rem;
-        color: oklch(0.9 0.01 265);
-        font-size: 0.75rem;
-        outline: none;
-    }
-
-    .add-input:focus {
-        border-color: color-mix(in oklch, var(--accent, #6b7280) 40%, transparent);
-        box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent, #6b7280) 40%, transparent);
-    }
-
-    .add-row {
-        display: flex;
-        align-items: center;
-        gap: 0.6rem;
-    }
-
-    .add-btn {
-        flex: 1;
-        font-size: 0.72rem;
-        background: none;
-        border: 1px solid oklch(1 0 0 / 12%);
-        border-radius: 6px;
-        color: oklch(0.6 0.02 265);
-        padding: 0.45rem 0.6rem;
-        cursor: pointer;
-        transition: all 0.15s ease;
-    }
-
-    .add-cancel {
-        font-size: 0.72rem;
-        background: none;
-        border: 1px solid oklch(1 0 0 / 12%);
-        border-radius: 6px;
-        color: oklch(0.45 0.02 265);
-        padding: 0.45rem 0.6rem;
-        cursor: pointer;
-        transition: all 0.15s ease;
-    }
-
-    .add-btn:hover:enabled {
-        color: oklch(0.9 0.01 265);
-        border-color: color-mix(in oklch, var(--accent, #6b7280) 40%, transparent);
-        background: color-mix(in oklch, var(--accent, #6b7280) 12%, transparent);
-    }
-
-    .add-cancel:hover:enabled {
-        color: oklch(0.9 0.01 265);
-        border-color: oklch(1 0 0 / 18%);
-        background: oklch(1 0 0 / 6%);
-    }
-
-    .add-btn:disabled,
-    .add-cancel:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-
-    .add-hint {
-        font-size: 0.65rem;
-        color: oklch(0.45 0.02 265);
-        margin-top: 0.2rem;
-    }
-
-    .hint {
-        text-align: center;
-        font-size: 0.7rem;
-        color: oklch(0.35 0.02 265);
-        margin-top: 2rem;
-    }
-
-    /* ── Encryption key field ────────────────────── */
-
-    .enc-block {
-        background: oklch(1 0 0 / 3%);
-        border: 1px solid oklch(1 0 0 / 8%);
-        border-radius: 8px;
-        padding: 0.65rem 0.75rem;
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-
-    .enc-label-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.5rem;
-    }
-
-    .enc-label {
-        font-size: 0.62rem;
-        color: oklch(0.4 0.02 265);
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-    }
-
-    .enc-toggle {
-        display: flex;
-        background: oklch(0.08 0.02 265);
-        border: 1px solid oklch(1 0 0 / 8%);
-        border-radius: 5px;
-        padding: 2px;
-        gap: 2px;
-    }
-
-    .enc-tab {
-        font-size: 0.6rem;
-        padding: 0.15rem 0.5rem;
-        background: transparent;
-        border: none;
-        border-radius: 3px;
-        color: oklch(0.42 0.02 265);
-        cursor: pointer;
-        transition: all 0.15s ease;
-        letter-spacing: 0.03em;
-    }
-
-    .enc-tab:hover {
-        color: oklch(0.7 0.02 265);
-    }
-
-    .enc-tab.active {
-        background: oklch(0.16 0.02 265);
-        color: #22d3ee;
-        border: 1px solid oklch(1 0 0 / 8%);
-    }
-
-    .enc-key-row {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        background: oklch(0.08 0.02 265);
-        border: 1px solid oklch(1 0 0 / 8%);
-        border-radius: 5px;
-        padding: 0.3rem 0.5rem;
-    }
-
-    .enc-key {
-        flex: 1;
-        font-size: 0.68rem;
-        color: #22d3ee;
-        letter-spacing: 0.06em;
-        word-break: break-all;
-        user-select: all;
-    }
-
-    .enc-regen {
-        background: none;
-        border: none;
-        color: oklch(0.45 0.02 265);
-        font-size: 0.85rem;
-        cursor: pointer;
-        padding: 0.1rem 0.2rem;
-        border-radius: 3px;
-        line-height: 1;
-        flex-shrink: 0;
-        transition: color 0.15s ease;
-    }
-
-    .enc-regen:hover {
-        color: oklch(0.8 0.02 265);
-    }
-
-    .enc-input {
-        background: oklch(0.08 0.02 265);
-        border: 1px solid oklch(1 0 0 / 8%);
-        border-radius: 5px;
-        padding: 0.3rem 0.5rem;
-        color: oklch(0.9 0.01 265);
-        font-size: 0.72rem;
-        outline: none;
-        transition: border-color 0.15s ease;
-        letter-spacing: 0.04em;
-    }
-
-    .enc-input::placeholder {
-        color: oklch(0.3 0.02 265);
-    }
-
-    .enc-input:focus {
-        border-color: #22d3ee44;
-    }
-
-    .enc-hint {
-        font-size: 0.6rem;
-        color: oklch(0.38 0.02 265);
-        line-height: 1.4;
-    }
-
-    /* ── Onboarding ─────────────────────────────── */
-
-    .onboard-wrap {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 50vh;
-    }
-
-    .onboard-card {
-        width: min(480px, 100%);
-        background: oklch(0.12 0.02 265);
-        border: 1px solid oklch(1 0 0 / 12%);
-        border-radius: 12px;
-        padding: 1.5rem;
-        display: flex;
-        flex-direction: column;
-        gap: 0.8rem;
-        box-shadow: 0 20px 60px oklch(0 0 0 / 40%);
-    }
-
-    .onboard-header {
-        font-size: 0.75rem;
-        letter-spacing: 0.08em;
-        color: oklch(0.6 0.02 265);
-        text-transform: uppercase;
-    }
-
-    .onboard-sub {
-        font-size: 0.72rem;
-        color: oklch(0.45 0.02 265);
-    }
-
-    .onboard-select {
-        background: oklch(1 0 0 / 4%);
-        border: 1px solid oklch(1 0 0 / 10%);
-        border-radius: 6px;
-        padding: 0.45rem 0.6rem;
-        color: oklch(0.9 0.01 265);
-        font-size: 0.75rem;
-        outline: none;
-        cursor: pointer;
-        appearance: none;
-    }
-
-    .onboard-select:focus {
-        border-color: oklch(1 0 0 / 20%);
-        box-shadow: 0 0 0 1px oklch(1 0 0 / 10%);
-    }
-
-    .onboard-preview {
-        display: flex;
-        flex-direction: column;
-        gap: 0.4rem;
-        padding: 0.6rem 0;
-    }
-
-    .onboard-preview-label {
-        font-size: 0.65rem;
-        color: oklch(0.4 0.02 265);
-        letter-spacing: 0.05em;
-        margin-bottom: 0.2rem;
-    }
-
-    .onboard-preview-item {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-size: 0.72rem;
-        color: oklch(0.8 0.01 265);
-        padding: 0.3rem 0.5rem;
-        background: oklch(1 0 0 / 3%);
-        border-radius: 4px;
-    }
-
-    .onboard-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        flex-shrink: 0;
-    }
-
-    .onboard-full {
-        color: oklch(0.5 0.02 265);
-        font-size: 0.65rem;
-        flex: 1;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .onboard-comp-count {
-        font-size: 0.6rem;
-        color: oklch(0.4 0.02 265);
-        flex-shrink: 0;
-    }
-
-    .onboard-btn {
-        font-size: 0.72rem;
-        background: none;
-        border: 1px solid oklch(1 0 0 / 12%);
-        border-radius: 6px;
-        color: oklch(0.6 0.02 265);
-        padding: 0.5rem 0.6rem;
-        cursor: pointer;
-        transition: all 0.15s ease;
-    }
-
-    .onboard-btn:hover:enabled {
-        color: oklch(0.9 0.01 265);
-        border-color: #22d3ee66;
-        background: #22d3ee18;
-    }
-
-    .onboard-btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-
-    /* ── Mobile ≤ 768px ──────────────────────── */
-    @media (max-width: 768px) {
-        .header {
-            padding: 0.875rem 1rem;
-        }
-        .header-inner {
-            flex-wrap: wrap;
-            gap: 0.5rem;
-        }
-        .header-right {
-            flex-wrap: wrap;
-            gap: 0.5rem;
-        }
-        .overall-pill {
-            padding: 0.3rem 0.65rem;
-        }
-        .user-group {
-            padding-left: 0;
-            border-left: none;
-        }
-        .user-email {
-            max-width: 140px;
-            font-size: 0.62rem;
-        }
-        .main {
-            padding: 1.25rem 0.75rem;
-        }
-        .grid {
-            grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
-        }
-        .add-card {
-            min-height: 120px;
-        }
-        .add-card-closed {
-            min-height: 80px;
-        }
-        .modal {
-            padding: 1rem;
-        }
-        .modal-card {
-            width: 100%;
-        }
-    }
-
-    /* ── Extra-small ≤ 480px ─────────────────── */
-    @media (max-width: 480px) {
-        .header {
-            padding: 0.75rem 0.65rem;
-        }
-        .main {
-            padding: 1rem 0.5rem;
-        }
-        .grid {
-            grid-template-columns: 1fr;
-            gap: 0.75rem;
-        }
-    }
-</style>
+<Dialog.Root open={addOpen} onOpenChange={onAddOpenChange}>
+    <Dialog.Content class="sm:max-w-md">
+        <form onsubmit={handleAddCourse} class="flex flex-col gap-6">
+            <Dialog.Header>
+                <Dialog.Title>Add course</Dialog.Title>
+                <Dialog.Description>New courses start with Quiz ×2 · Midsem · Endsem.</Dialog.Description>
+            </Dialog.Header>
+            <Field.FieldGroup>
+                <Field.Field>
+                    <Field.FieldLabel for="course-name">Short name</Field.FieldLabel>
+                    <Input id="course-name" placeholder="e.g. DSA" bind:value={newCourseName} />
+                </Field.Field>
+                <Field.Field>
+                    <Field.FieldLabel for="course-full-name">Full name</Field.FieldLabel>
+                    <Input id="course-full-name" placeholder="Data Structures and Algorithms" bind:value={newCourseFullName} />
+                </Field.Field>
+            </Field.FieldGroup>
+            <Dialog.Footer>
+                <Button type="button" variant="outline" disabled={creatingCourse} onclick={closeAddCourse}>
+                    Cancel
+                </Button>
+                <Button type="submit" disabled={creatingCourse || newCourseName.trim().length === 0}>
+                    {#if creatingCourse}
+                        <Spinner data-icon="inline-start" />
+                        Adding…
+                    {:else}
+                        Create
+                    {/if}
+                </Button>
+            </Dialog.Footer>
+        </form>
+    </Dialog.Content>
+</Dialog.Root>

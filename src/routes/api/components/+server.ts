@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { addComponent, updateComponentField, deleteComponent } from '$lib/server/db';
+import { UnknownFieldError, addComponent, updateComponentField, deleteComponent } from '$lib/server/db';
 import type { RequestHandler } from './$types';
 
 /** POST /api/components → add a new component */
@@ -18,7 +18,12 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
     if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id, field, value } = await request.json();
-    await updateComponentField(locals.supabase, id, field, value);
+    try {
+        await updateComponentField(locals.supabase, id, field, value);
+    } catch (err) {
+        if (err instanceof UnknownFieldError) return json({ error: err.message }, { status: 400 });
+        throw err;
+    }
     return json({ ok: true });
 };
 

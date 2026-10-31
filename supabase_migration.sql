@@ -95,3 +95,23 @@ CREATE POLICY "Users can manage sub_items of their components"
         AND courses.user_id = auth.uid()
     )
   );
+
+-- 4. Class statistics / scaling columns (2026-10-31)
+-- Tables created before these columns were added to the CREATE TABLE statements
+-- never got them (CREATE TABLE IF NOT EXISTS doesn't alter existing tables), so
+-- class stats were silently dropped. Idempotent: safe to run on any database.
+ALTER TABLE components ADD COLUMN IF NOT EXISTS stats_mode      TEXT DEFAULT 'global';
+ALTER TABLE components ADD COLUMN IF NOT EXISTS scale_target_id TEXT;
+ALTER TABLE components ADD COLUMN IF NOT EXISTS class_avg       REAL;
+ALTER TABLE components ADD COLUMN IF NOT EXISTS class_median    REAL;
+ALTER TABLE components ADD COLUMN IF NOT EXISTS class_max       REAL;
+ALTER TABLE components ADD COLUMN IF NOT EXISTS class_std_dev   REAL;
+
+ALTER TABLE sub_items ADD COLUMN IF NOT EXISTS scale_target_id TEXT;
+ALTER TABLE sub_items ADD COLUMN IF NOT EXISTS class_avg       REAL;
+ALTER TABLE sub_items ADD COLUMN IF NOT EXISTS class_median    REAL;
+ALTER TABLE sub_items ADD COLUMN IF NOT EXISTS class_max       REAL;
+ALTER TABLE sub_items ADD COLUMN IF NOT EXISTS class_std_dev   REAL;
+
+-- Make PostgREST pick up the new columns immediately.
+NOTIFY pgrst, 'reload schema';
