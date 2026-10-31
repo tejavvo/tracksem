@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { addSubItem, updateSubItemField, deleteSubItem, getSubItemCount } from '$lib/server/db';
+import { UnknownFieldError, addSubItem, updateSubItemField, deleteSubItem, getSubItemCount } from '$lib/server/db';
 import type { RequestHandler } from './$types';
 
 /** POST /api/sub-items → add a new sub-item */
@@ -18,7 +18,12 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
     if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id, field, value } = await request.json();
-    await updateSubItemField(locals.supabase, id, field, value);
+    try {
+        await updateSubItemField(locals.supabase, id, field, value);
+    } catch (err) {
+        if (err instanceof UnknownFieldError) return json({ error: err.message }, { status: 400 });
+        throw err;
+    }
     return json({ ok: true });
 };
 

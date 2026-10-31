@@ -1,5 +1,6 @@
 import type { Course, Component, SubItem } from '$lib/types';
-import { predictGrade, percentileToGrade, getCurvedGradeColor } from '$lib/curveGrading';
+import { toast } from 'svelte-sonner';
+import { predictGrade, percentileToGrade, getCurvedGradeColor, estimateStdDev, scoreToPercentile } from '$lib/curveGrading';
 
 function generateId(): string {
     return crypto.randomUUID();
@@ -145,14 +146,166 @@ export function effectiveComponentWeight(course: Course, componentId: string): n
     );
 }
 
+// ─── Course totals (gained / max possible) ───────────────────────────────────
+
+type PctRange = { lo: number; hi: number };
+
+function findItem(course: Course, id: string): Component | SubItem | null {
+    for (const comp of course.components) {
+        if (comp.id === id) return comp;
+        const sub = comp.subItems?.find((item) => item.id === id);
+        if (sub) return sub;
+    }
+    return null;
+}
+
+/** Average of the best `k` values. */
+function bestAvg(values: number[], k: number): number {
+    const top = [...values].sort((a, b) => b - a).slice(0, k);
+    return top.reduce((a, b) => a + b, 0) / top.length;
+}
+
+/**
+ * Range (0–100) a component or sub-item can still end up at:
+ * `lo` treats everything ungraded as 0, `hi` treats it as full marks.
+ */
+function itemPctRange(course: Course, item: Component | SubItem, seen: Set<string> = new Set()): PctRange {
+    if (seen.has(item.id)) return { lo: 0, hi: 100 };
+    seen.add(item.id);
+
+    if (item.scaleTargetId) {
+        const target = findItem(course, item.scaleTargetId);
+        return target ? itemPctRange(course, target, seen) : { lo: 0, hi: 100 };
+    }
+
+    if ('subItems' in item && item.subItems && item.subItems.length > 0) {
+        const ranges = item.subItems.map((sub) => itemPctRange(course, sub, new Set(seen)));
+        const n = ranges.length;
+        const k = item.bestOf && item.bestOf < n ? item.bestOf : n;
+        return { lo: bestAvg(ranges.map((r) => r.lo), k), hi: bestAvg(ranges.map((r) => r.hi), k) };
+    }
+
+    if (item.score === null) return { lo: 0, hi: 100 };
+    const pct = (item.score / item.maxScore) * 100;
+    return { lo: pct, hi: pct };
+}
+
+export type CourseTotals = {
+    /** Course points already locked in (ungraded work counted as 0). */
+    gained: number;
+    /** Course points reachable if every ungraded item gets full marks. */
+    maxPossible: number;
+    /** Course points already assessed, i.e. no longer at stake (totalWeight − open points). */
+    graded: number;
+    /** Sum of component weights (normally 100). */
+    totalWeight: number;
+};
+
+export function computeCourseTotals(course: Course): CourseTotals {
+    let gained = 0;
+    let maxPossible = 0;
+    let graded = 0;
+    let totalWeight = 0;
+    for (const comp of course.components) {
+        const { lo, hi } = itemPctRange(course, comp);
+        gained += (lo * comp.weight) / 100;
+        maxPossible += (hi * comp.weight) / 100;
+        graded += Math.max(0, comp.weight * (1 - (hi - lo) / 100));
+        totalWeight += comp.weight;
+    }
+    return { gained, maxPossible, graded, totalWeight };
+}
+
+// ─── Class distribution of course totals ─────────────────────────────────────
+
+type PctStats = { mean: number; sd: number };
+
+/** Class mean and σ for an item, expressed in percent of its max score. */
+function itemClassStats(course: Course, item: Component | SubItem, seen: Set<string> = new Set()): PctStats | null {
+    if (seen.has(item.id)) return null;
+    seen.add(item.id);
+
+    if (item.scaleTargetId) {
+        const target = findItem(course, item.scaleTargetId);
+        return target ? itemClassStats(course, target, seen) : null;
+    }
+
+    if ('subItems' in item && item.statsMode === 'per-sub' && item.subItems && item.subItems.length > 0) {
+        const stats = item.subItems
+            .map((sub) => itemClassStats(course, sub, new Set(seen)))
+            .filter((st): st is PctStats => st !== null);
+        if (stats.length === 0) return null;
+        const m = stats.length;
+        return {
+            mean: stats.reduce((a, st) => a + st.mean, 0) / m,
+            sd: Math.sqrt(stats.reduce((a, st) => a + st.sd ** 2, 0)) / m,
+        };
+    }
+
+    if (item.classAvg == null || item.maxScore <= 0) return null;
+    const sd = item.classStdDev != null && item.classStdDev > 0
+        ? item.classStdDev
+        : estimateStdDev(item.classAvg, item.classMax, item.maxScore);
+    return { mean: (item.classAvg / item.maxScore) * 100, sd: (sd / item.maxScore) * 100 };
+}
+
+export type ClassTotalDistribution = {
+    /** Expected class total, in course points over the covered components. */
+    mean: number;
+    sd: number;
+    /** Your course points over the same components. */
+    yours: number;
+    /** Weight (course points) covered by components with both class stats and your score. */
+    coveredWeight: number;
+    coveredCount: number;
+    /** Share of the class estimated to be at or below your total (0–100). */
+    percentile: number;
+};
+
+/**
+ * Normal approximation of the class's course totals, built only from components
+ * that have class statistics and your score. Component scores are assumed
+ * independent, so means and variances add.
+ */
+export function computeClassTotalDistribution(course: Course): ClassTotalDistribution | null {
+    let mean = 0;
+    let variance = 0;
+    let yours = 0;
+    let coveredWeight = 0;
+    let coveredCount = 0;
+
+    for (const comp of course.components) {
+        const stats = itemClassStats(course, comp);
+        const pct = computeEffectiveCompPct(course, comp);
+        if (!stats || pct === null) continue;
+        const w = comp.weight / 100;
+        mean += stats.mean * w;
+        variance += (stats.sd * w) ** 2;
+        yours += pct * w;
+        coveredWeight += comp.weight;
+        coveredCount++;
+    }
+
+    if (coveredCount === 0) return null;
+    const sd = Math.sqrt(variance);
+    return { mean, sd, yours, coveredWeight, coveredCount, percentile: scoreToPercentile(yours, mean, sd) };
+}
+
 /** Fire-and-forget API helper */
 async function api(path: string, method: string, body?: unknown): Promise<unknown> {
-    const res = await fetch(path, {
-        method,
-        headers: body ? { 'Content-Type': 'application/json' } : {},
-        body: body ? JSON.stringify(body) : undefined
-    });
-    return res.json();
+    try {
+        const res = await fetch(path, {
+            method,
+            headers: body ? { 'Content-Type': 'application/json' } : {},
+            body: body ? JSON.stringify(body) : undefined
+        });
+        if (!res.ok) throw new Error(`${method} ${path} failed (${res.status})`);
+        return await res.json();
+    } catch (err) {
+        console.error(err);
+        toast.error("Couldn't save your change", { description: 'Reload the page to see what was saved.' });
+        return null;
+    }
 }
 
 class GradesStore {
@@ -181,8 +334,8 @@ class GradesStore {
 
     /** Add a new course with default components */
     async addCourse(name: string, fullName: string, color: string): Promise<void> {
-        const created = (await api('/api/courses', 'POST', { name, fullName, color })) as Course;
-        this.courses = [...this.courses, created];
+        const created = (await api('/api/courses', 'POST', { name, fullName, color })) as Course | null;
+        if (created) this.courses = [...this.courses, created];
     }
 
     /** Seed courses from the catalog for a given branch + semester */
