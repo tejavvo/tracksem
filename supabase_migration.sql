@@ -115,3 +115,25 @@ ALTER TABLE sub_items ADD COLUMN IF NOT EXISTS class_std_dev   REAL;
 
 -- Make PostgREST pick up the new columns immediately.
 NOTIFY pgrst, 'reload schema';
+
+-- 5. Personal API tokens (2026-10-31)
+-- Only a SHA-256 hash of each token is stored; the token itself is shown once.
+CREATE TABLE IF NOT EXISTS api_tokens (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  token_hash    TEXT NOT NULL UNIQUE,
+  prefix        TEXT NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_used_at  TIMESTAMPTZ
+);
+
+ALTER TABLE api_tokens ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can manage their own API tokens" ON api_tokens;
+CREATE POLICY "Users can manage their own API tokens"
+  ON api_tokens FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+NOTIFY pgrst, 'reload schema';

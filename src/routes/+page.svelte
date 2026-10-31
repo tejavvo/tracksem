@@ -23,6 +23,10 @@
     import PlusIcon from "@lucide/svelte/icons/plus";
     import RefreshCwIcon from "@lucide/svelte/icons/refresh-cw";
     import LogOutIcon from "@lucide/svelte/icons/log-out";
+    import KeyRoundIcon from "@lucide/svelte/icons/key-round";
+    import ApiTokensDialog from "$lib/components/ApiTokensDialog.svelte";
+
+    let tokensOpen = $state(false);
 
     const supabase = createBrowserClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY);
 
@@ -167,6 +171,10 @@
                         </DropdownMenu.Group>
                         <DropdownMenu.Separator />
                         <DropdownMenu.Group>
+                            <DropdownMenu.Item onSelect={() => (tokensOpen = true)}>
+                                <KeyRoundIcon />
+                                API tokens
+                            </DropdownMenu.Item>
                             <DropdownMenu.Item onSelect={logout}>
                                 <LogOutIcon />
                                 Sign out
@@ -366,3 +374,5 @@
         </form>
     </Dialog.Content>
 </Dialog.Root>
+
+<ApiTokensDialog open={tokensOpen} onOpenChange={(o) => (tokensOpen = o)} />
