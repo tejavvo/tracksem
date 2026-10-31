@@ -49,10 +49,14 @@ export async function seedByBranch(
 
 // ── Shared fetch helper ────────────────────────────────────────────────────────
 
-async function fetchAllCourses(supabase: SupabaseClient): Promise<Course[]> {
-  const { data: courseRows, error: courseErr } = await supabase
-    .from("courses")
-    .select("id, name, full_name, color");
+/**
+ * Load courses with components and sub-items. With a user-session client RLS
+ * scopes the rows; pass `userId` when using the service-role client.
+ */
+export async function fetchAllCourses(supabase: SupabaseClient, userId?: string): Promise<Course[]> {
+  let courseQuery = supabase.from("courses").select("id, name, full_name, color");
+  if (userId) courseQuery = courseQuery.eq("user_id", userId);
+  const { data: courseRows, error: courseErr } = await courseQuery;
 
   if (courseErr) throw courseErr;
   if (!courseRows || courseRows.length === 0) return [];
