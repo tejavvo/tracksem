@@ -83,4 +83,6 @@ curl -sf -X POST "$TRACKSEM_URL/api/v1/components" \
   -d '{"courseId":"<course id>","name":"Project","weight":25,"maxScore":100}'
 ```
 
+Use `curl` for requests. Cloudflare rejects Python's default `urllib` User-Agent with a non-JSON error page, so if you script in Python, send a `User-Agent` header (e.g. `tracksem-skill/1.0`).
+
 On `401` the token is wrong or revoked. On `503` the server has no `SUPABASE_SERVICE_ROLE_KEY`, so tell the user the API isn't configured on their deployment.

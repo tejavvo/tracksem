@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { grades, computeEffectiveCompPct, computeCourseTotals } from "$lib/stores/grades.svelte";
+    import { grades, computeEffectiveCompPct, computeCourseTotals, computeClassGap } from "$lib/stores/grades.svelte";
     import { getGradeColor, getLetterGrade } from "$lib/grading";
     import type { Course } from "$lib/types";
     import * as Card from "$lib/components/ui/card";
@@ -18,6 +18,7 @@
     const letter = $derived(getLetterGrade(proj.grade));
     const curved = $derived(grades.curvedGrade(course.id));
     const totals = $derived(computeCourseTotals(course));
+    const classGap = $derived(computeClassGap(course));
     const pctOf = (points: number) => `${((points / (totals.totalWeight || 100)) * 100).toFixed(1)}%`;
 </script>
 
@@ -75,6 +76,11 @@
                 of <span class="text-foreground font-mono">{pctOf(totals.graded)}</span> graded ·
                 max <span class="text-foreground font-mono">{pctOf(totals.maxPossible)}</span>
             </span>
+            {#if classGap}
+                <Badge variant="outline" class="font-mono">
+                    {classGap.gap > 0 ? "+" : ""}{classGap.gap.toFixed(1)} vs class
+                </Badge>
+            {/if}
             {#if totalWeight !== 100}
                 <Badge variant="destructive">
                     <TriangleAlertIcon data-icon="inline-start" />

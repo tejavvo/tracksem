@@ -6,6 +6,7 @@
         computeEffectiveSubPct,
         computeCourseTotals,
         computeClassTotalDistribution,
+        computeClassGap,
     } from "$lib/stores/grades.svelte";
     import { getGradeColor, getLetterGrade } from "$lib/grading";
     import { predictGrade } from "$lib/curveGrading";
@@ -33,6 +34,9 @@
     import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
     import ArrowLeftIcon from "@lucide/svelte/icons/arrow-left";
     import SlidersIcon from "@lucide/svelte/icons/sliders-horizontal";
+    import TargetIcon from "@lucide/svelte/icons/target";
+    import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
+    import * as Collapsible from "$lib/components/ui/collapsible";
 
     let { data }: PageProps = $props();
 
@@ -41,6 +45,8 @@
     const totalWeight = $derived(grades.totalWeight(data.courseId));
     const totals = $derived(course ? computeCourseTotals(course) : null);
     const classDist = $derived(course ? computeClassTotalDistribution(course) : null);
+    const classGap = $derived(course ? computeClassGap(course) : null);
+    let distOpen = $state(false);
     const gradeColor = $derived(getGradeColor(proj.grade));
     const curved = $derived(grades.curvedGrade(data.courseId));
 
@@ -436,24 +442,64 @@
 
         <Card.Root>
             <Card.Header>
-                <Card.Title>Class distribution</Card.Title>
+                <Card.Title>Standing vs class</Card.Title>
                 <Card.Description>
-                    {#if classDist}
-                        Your score vs the class on the {classDist.coveredCount} graded component{classDist.coveredCount === 1 ? "" : "s"}
-                        with a class average ({classDist.coveredWeight}% of the course). Estimated as a normal distribution.
+                    {#if classGap}
+                        Based on {classGap.coveredNames.join(", ")}: the graded work with a class average
+                        ({classGap.coveredWeight.toFixed(1)}% of the course).
                     {:else}
-                        Shows where you stand once you enter class averages.
+                        Shows how far you are from the class average once you enter class averages.
                     {/if}
                 </Card.Description>
-                {#if classDist}
-                    <Card.Action>
-                        <Badge variant="secondary" class="font-mono">P{classDist.percentile.toFixed(0)}</Badge>
-                    </Card.Action>
-                {/if}
             </Card.Header>
-            <Card.Content>
-                {#if classDist}
-                    <ClassDistributionChart dist={classDist} />
+            <Card.Content class="flex flex-col gap-4">
+                {#if classGap}
+                    {@const behind = classGap.gap < -0.05}
+                    {@const ahead = classGap.gap > 0.05}
+                    <div class="flex flex-col gap-1">
+                        <span class="font-mono text-4xl font-semibold tabular-nums">
+                            {classGap.gap > 0 ? "+" : ""}{classGap.gap.toFixed(1)}%
+                        </span>
+                        <span class="text-muted-foreground text-sm">
+                            {#if behind}of the course behind the class average{:else if ahead}of the course ahead of the class average{:else}level with the class average{/if}
+                        </span>
+                    </div>
+                    {#if classGap.open > 0}
+                        <Alert.Root>
+                            <TargetIcon />
+                            <Alert.Title>
+                                {#if behind}
+                                    To catch up: score {classGap.catchUp!.toFixed(1)} points above the class average on the remaining {classGap.open.toFixed(1)}%
+                                {:else}
+                                    Matching the class average on the remaining {classGap.open.toFixed(1)}% keeps you {ahead ? "ahead" : "level"}
+                                {/if}
+                            </Alert.Title>
+                            <Alert.Description>
+                                For example, {Math.min(100, 70 + Math.max(0, classGap.catchUp ?? 0)).toFixed(0)}% where the class gets 70%.
+                            </Alert.Description>
+                        </Alert.Root>
+                    {:else}
+                        <p class="text-muted-foreground text-sm">The course is fully graded.</p>
+                    {/if}
+                    {#if classDist}
+                        <Collapsible.Root bind:open={distOpen}>
+                            <Collapsible.Trigger>
+                                {#snippet child({ props })}
+                                    <Button {...props} variant="ghost" size="sm" class="-ml-2">
+                                        <ChevronDownIcon data-icon="inline-start" class={distOpen ? "" : "-rotate-90"} />
+                                        Show distribution
+                                    </Button>
+                                {/snippet}
+                            </Collapsible.Trigger>
+                            <Collapsible.Content class="flex flex-col gap-2 pt-2">
+                                <p class="text-muted-foreground text-xs">
+                                    Estimated class spread on the graded part only ({classDist.coveredWeight}% of the course).
+                                    Early in a course this is narrow, so percentiles look extreme.
+                                </p>
+                                <ClassDistributionChart dist={classDist} />
+                            </Collapsible.Content>
+                        </Collapsible.Root>
+                    {/if}
                 {:else}
                     <Empty.Root class="border border-dashed">
                         <Empty.Header>
@@ -466,14 +512,6 @@
                     </Empty.Root>
                 {/if}
             </Card.Content>
-            {#if classDist}
-                {@const W = classDist.coveredWeight || 1}
-                <Card.Footer class="text-muted-foreground flex-wrap gap-x-6 gap-y-1 text-xs">
-                    <span>You: <span class="text-foreground font-mono">{((classDist.yours / W) * 100).toFixed(1)}%</span></span>
-                    <span>Class average: <span class="text-foreground font-mono">{((classDist.mean / W) * 100).toFixed(1)}%</span></span>
-                    <span>Spread (σ): <span class="text-foreground font-mono">{((classDist.sd / W) * 100).toFixed(1)}%</span></span>
-                </Card.Footer>
-            {/if}
         </Card.Root>
     </main>
 </div>

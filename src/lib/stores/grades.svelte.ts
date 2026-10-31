@@ -249,6 +249,66 @@ function itemClassStats(course: Course, item: Component | SubItem, seen: Set<str
     return { mean: (item.classAvg / item.maxScore) * 100, sd: (sd / item.maxScore) * 100 };
 }
 
+// ─── Standing vs class (gap in course percent) ───────────────────────────────
+
+export type ClassGap = {
+    /** Your course points minus the class average's, over graded items with a class average. Negative = behind. */
+    gap: number;
+    /** Course weight those items cover. */
+    coveredWeight: number;
+    /** Names of the components that contributed. */
+    coveredNames: string[];
+    /** Course points still open (not yet graded). */
+    open: number;
+    /** Percentage points above the class average needed on the open part to close the gap (null if nothing is open). */
+    catchUp: number | null;
+    totalWeight: number;
+};
+
+/**
+ * How far you are from the class average, in course percent. Only graded
+ * items that have a class average count; nothing is extrapolated.
+ */
+export function computeClassGap(course: Course): ClassGap | null {
+    let gap = 0;
+    let coveredWeight = 0;
+    const names = new Set<string>();
+
+    const add = (name: string, weight: number, youPct: number | null, cls: PctStats | null) => {
+        if (youPct === null || !cls || weight <= 0) return;
+        gap += (weight * (youPct - cls.mean)) / 100;
+        coveredWeight += weight;
+        names.add(name);
+    };
+
+    for (const comp of course.components) {
+        const subs = comp.subItems ?? [];
+        if (comp.scaleTargetId || subs.length === 0) {
+            add(comp.name, comp.weight, computeEffectiveCompPct(course, comp), itemClassStats(course, comp));
+            continue;
+        }
+        const perPart = comp.statsMode === 'per-sub';
+        for (const sub of subs) {
+            const cls = perPart || sub.scaleTargetId ? itemClassStats(course, sub) : itemClassStats(course, comp);
+            add(comp.name, comp.weight / subs.length, computeEffectiveSubPct(course, sub), cls);
+        }
+    }
+
+    if (coveredWeight === 0) return null;
+    const totals = computeCourseTotals(course);
+    const scale = 100 / (totals.totalWeight || 100);
+    const open = Math.max(0, totals.maxPossible - totals.gained) * scale;
+    const g = gap * scale;
+    return {
+        gap: g,
+        coveredWeight: coveredWeight * scale,
+        coveredNames: [...names],
+        open,
+        catchUp: open > 0 ? (-g / open) * 100 : null,
+        totalWeight: totals.totalWeight,
+    };
+}
+
 export type ClassTotalDistribution = {
     /** Expected class total, in course points over the covered components. */
     mean: number;
